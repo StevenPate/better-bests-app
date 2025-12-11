@@ -379,22 +379,24 @@ export class BestsellerParser {
     return result[isbn] || null;
   }
 
-  static async updateBookAudience(isbn: string, audience: string): Promise<void> {
+  static async updateBookAudience(isbn: string, audience: string, region: string = 'PNBA'): Promise<void> {
     try {
       const { error } = await supabase.from('book_audiences').upsert({
         isbn,
-        audience
+        audience,
+        region
       }, {
-        onConflict: 'isbn'
+        onConflict: 'region,isbn'
       });
-      
+
       if (error) {
         logger.error('Supabase error updating book audience:', error);
         throw error;
       }
 
-      // Update cache
-      this.audienceCache.set(isbn, audience);
+      // Update cache with region-aware key
+      const cacheKey = `${region}:${isbn}`;
+      this.audienceCache.set(cacheKey, audience);
     } catch (error) {
       logger.error('Error updating book audience:', error);
       throw error;

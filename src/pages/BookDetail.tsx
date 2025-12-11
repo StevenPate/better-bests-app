@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BestsellerParser } from "@/utils/bestsellerParser";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useRegion } from "@/hooks/useRegion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { logger } from '@/lib/logger';
 import { RegionalHeatMap } from '@/components/BookChart';
@@ -61,6 +62,7 @@ const BookDetail = () => {
   const [bookAudience, setBookAudience] = useState<string>('');
   const { isPbnStaff } = useAuth();
   const { toast } = useToast();
+  const { currentRegion } = useRegion();
 
   const fetchBookCover = async (isbn: string): Promise<BookInfo | null> => {
     try {
@@ -161,14 +163,14 @@ const BookDetail = () => {
 
   const handleAudienceChange = async (audience: string) => {
     if (!isbn) return;
-    
+
     setBookAudience(audience);
-    
+
     try {
-      await BestsellerParser.updateBookAudience(isbn, audience);
+      await BestsellerParser.updateBookAudience(isbn, audience, currentRegion.abbreviation);
       toast({
         title: "Updated",
-        description: `Audience set to ${audience === 'A' ? 'Adult' : audience === 'T' ? 'Teen' : 'Children'}`,
+        description: `Audience set to ${audience === 'A' ? 'Adult' : audience === 'T' ? 'Teen' : 'Children'} for ${currentRegion.abbreviation}`,
       });
     } catch (error) {
       logger.error('Error updating audience:', error);
