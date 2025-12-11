@@ -15,6 +15,7 @@ export const REGION_ABBREVIATIONS = [
   'CALIBAS',
   'GLIBA',
   'MPIBA',
+  'MIBA',
   'NAIBA',
   'NEIBA',
   'SIBA',

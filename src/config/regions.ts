@@ -48,12 +48,21 @@ export const REGIONS: Region[] = [
     website_url: 'https://www.mountainsplains.org/',
   },
   {
+    abbreviation: 'MIBA',
+    display_name: 'MIBA - Midwest',
+    full_name: 'Midwest Independent Booksellers Association',
+    file_code: 'mw',
+    is_active: true,
+    display_order: 6,
+    website_url: 'https://www.midwestbooksellers.org/',
+  },
+  {
     abbreviation: 'NAIBA',
     display_name: 'NAIBA - New Atlantic',
     full_name: 'New Atlantic Independent Booksellers Association',
     file_code: 'na',
     is_active: true,
-    display_order: 6,
+    display_order: 7,
     website_url: 'https://www.naiba.com/',
   },
   {
@@ -62,7 +71,7 @@ export const REGIONS: Region[] = [
     full_name: 'New England Independent Booksellers Association',
     file_code: 'ne',
     is_active: true,
-    display_order: 7,
+    display_order: 8,
     website_url: 'https://newenglandbooks.org/',
   },
   {
@@ -71,7 +80,7 @@ export const REGIONS: Region[] = [
     full_name: 'Southern Independent Booksellers Alliance',
     file_code: 'si',
     is_active: true,
-    display_order: 8,
+    display_order: 9,
     website_url: 'https://sibaweb.com/',
   },
 ];
