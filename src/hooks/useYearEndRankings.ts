@@ -94,7 +94,7 @@ async function fetchRankings(
       // Stage 2: Get top 10 per region by regional_score
       // Need to query each region separately to ensure 10 per region
       console.log('🔍 Stage 2: Fetching top 10 per region...');
-      const regions = ['PNBA', 'CALIBAN', 'CALIBAS', 'GLIBA', 'MPIBA', 'NAIBA', 'NEIBA', 'SIBA'];
+      const regions = ['PNBA', 'CALIBAN', 'CALIBAS', 'GLIBA', 'MPIBA', 'MIBA', 'NAIBA', 'NEIBA', 'SIBA'];
       const regionalHitsPromises = regions.map(region =>
         supabase
           .from('book_regional_performance')

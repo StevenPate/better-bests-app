@@ -12,7 +12,7 @@ import { generateWeekDates } from './utils';
 import type { RegionalHeatMapProps, TimeRange } from './types';
 
 // All tracked regions (always display)
-const ALL_REGIONS = ['PNBA', 'CALIBAN', 'CALIBAS', 'GLIBA', 'MPIBA', 'NAIBA', 'NEIBA', 'SIBA'];
+const ALL_REGIONS = ['PNBA', 'CALIBAN', 'CALIBAS', 'GLIBA', 'MPIBA', 'MIBA', 'NAIBA', 'NEIBA', 'SIBA'];
 
 export function RegionalHeatMap({ isbn }: RegionalHeatMapProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>(26);

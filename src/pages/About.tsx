@@ -60,8 +60,8 @@ export default function About() {
             <CardContent>
               <ul className="space-y-2 list-disc list-inside">
                 <li>
-                  <strong>Multi-Region Support:</strong> Track bestsellers across 8 regional
-                  associations (PNBA, CALIBAN, CALIBAS, GLIBA, MPIBA, NAIBA, NEIBA, SIBA)
+                  <strong>Multi-Region Support:</strong> Track bestsellers across 9 regional
+                  associations (PNBA, CALIBAN, CALIBAS, GLIBA, MPIBA, MIBA, NAIBA, NEIBA, SIBA)
                 </li>
                 <li>
                   <strong>Add/Drop Tracking:</strong> Instantly see which books are new to
