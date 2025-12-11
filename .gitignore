@@ -59,7 +59,6 @@ supabase/.env*
 # Project specific
 .claude/
 .worktrees/
-claude.md
 
 # Temporary files
 *.tmp
