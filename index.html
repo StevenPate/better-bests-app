@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Better Bestsellers - Weekly bestseller lists with bells and whistles</title>
+    <meta name="description" content="Transform bestseller lists into beautiful, searchable book databases. Parse text files and discover books with elegant simplicity." />
+    <link rel="icon" href="/favicon.png" type="image/png">
+
+    <!-- Open Graph / Social Sharing -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://betterbests.app/review/2025">
+    <meta property="og:title" content="BetterBests 2025 Year in Review">
+    <meta property="og:description" content="Indie Bookseller Bestseller Analysis - Regional Top 10s, Most Regional & National Books">
+    <meta property="og:image" content="https://betterbests.app/awards-social-card.png">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://betterbests.app/review/2025">
+    <meta name="twitter:title" content="BetterBests 2025 Year in Review">
+    <meta name="twitter:description" content="Indie Bookseller Bestseller Analysis - Regional Top 10s, Most Regional & National Books">
+    <meta name="twitter:image" content="https://betterbests.app/awards-social-card.png">
+
+    <!-- Theme Script - Must run FIRST, before any styles, to prevent flash -->
+    <script>
+      (function() {
+        try {
+          const storedTheme = localStorage.getItem('theme');
+          const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const shouldBeDark = storedTheme === 'dark' || (storedTheme === 'system' && systemPrefersDark) || (!storedTheme && systemPrefersDark);
+
+          if (shouldBeDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <!-- Base styles to prevent flash - applied immediately after theme is set -->
+    <style>
+      html {
+        background-color: #ffffff;
+        color: #1a1a1a;
+      }
+      html.dark {
+        background-color: #000000;
+        color: #e0e0e0;
+      }
+      body {
+        background-color: inherit;
+        color: inherit;
+      }
+    </style>
+
+    <!-- Umami Analytics -->
+    <script
+      defer
+      src="https://cloud.umami.is/script.js"
+      data-website-id="%VITE_UMAMI_WEBSITE_ID%"
+    ></script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

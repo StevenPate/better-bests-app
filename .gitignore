@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.staging
+.env.production
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+accessibility-reports/
+reports/
+test-results/
+
+# Backup files
+backups/
+backup_*.sql
+*.backup
+*.bak
+
+# Supabase
+supabase/.temp/
+supabase/.env*
+
+# Project specific
+.claude/
+.worktrees/
+claude.md
+
+# Temporary files
+*.tmp
+*.temp
+*~

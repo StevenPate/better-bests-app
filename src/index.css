@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* BetterBests.app Design System - Light & Dark Themes
+   Following the refined editorial aesthetic specification
+*/
+
+@layer base {
+  /* Light theme - clean and editorial */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 97%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 266 83% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 35%;
+
+    --accent: 266 83% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 266 83% 50%;
+
+    --radius: 0.5rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(266 83% 50%), hsl(280 85% 58%));
+    --gradient-hero: linear-gradient(180deg, hsl(266 83% 50% / 0.1), transparent);
+    --shadow-book: 0 4px 20px -4px hsl(0 0% 0% / 0.15);
+    --shadow-card: 0 2px 12px -2px hsl(0 0% 0% / 0.1);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --success-bg: 142 68% 95%;
+    --success-bg-hover: 142 68% 92%;
+    --success-border: 142 71% 80%;
+    --success-text: 142 71% 30%;
+
+    --danger-bg: 0 73% 95%;
+    --danger-bg-hover: 0 73% 92%;
+    --danger-border: 0 73% 80%;
+    --danger-text: 0 73% 30%;
+
+    --sidebar-background: 0 0% 97%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 266 83% 58%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 88%;
+    --sidebar-ring: 266 83% 58%;
+  }
+
+  /* Dark theme - editorial black aesthetic */
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 88%;
+
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 88%;
+
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 88%;
+
+    --primary: 270 95% 75%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 7%;
+    --secondary-foreground: 0 0% 65%;
+
+    --muted: 0 0% 7%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 142 71% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 73% 41%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 7%;
+    --input: 0 0% 12%;
+    --ring: 270 95% 75%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(270 95% 75%), hsl(280 85% 70%));
+    --gradient-hero: linear-gradient(180deg, hsl(270 95% 75% / 0.1), transparent);
+    --shadow-book: 0 4px 20px -4px hsl(0 0% 0% / 0.5);
+    --shadow-card: 0 2px 12px -2px hsl(0 0% 0% / 0.4);
+
+    --success-bg: 142 68% 8%;
+    --success-bg-hover: 142 68% 10%;
+    --success-border: 142 71% 20%;
+    --success-text: 142 71% 45%;
+
+    --danger-bg: 0 73% 7%;
+    --danger-bg-hover: 0 73% 9%;
+    --danger-border: 0 73% 20%;
+    --danger-text: 0 73% 41%;
+
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 88%;
+    --sidebar-primary: 270 95% 75%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 9%;
+    --sidebar-accent-foreground: 0 0% 88%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 270 95% 75%;
+
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Typography refinements */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  /* Only apply primary color to links within content areas, not navigation */
+  main a:not([class*="inline-flex"]):not([class*="button"]),
+  article a:not([class*="inline-flex"]):not([class*="button"]),
+  section a:not([class*="inline-flex"]):not([class*="button"]) {
+    @apply text-primary hover:text-primary/80 transition-colors;
+  }
+
+  /* Fix dropdown menu subtitle contrast on hover/focus */
+  [role="menuitem"]:focus .text-muted-foreground,
+  [role="menuitem"][data-highlighted] .text-muted-foreground {
+    @apply text-accent-foreground/80;
+  }
+}
+
+@layer components {
+  /* Editorial card pattern */
+  .editorial-card {
+    @apply bg-gray-950 border border-gray-900 rounded-lg p-6;
+    @apply hover:bg-gray-900/50 hover:border-gray-800 transition-all;
+  }
+
+  /* Button patterns */
+  .btn-default {
+    @apply px-4 py-2.5 bg-gray-950 border border-gray-800 rounded-md;
+    @apply text-gray-300 text-sm hover:bg-gray-900 hover:border-gray-700 transition-all;
+  }
+
+  .btn-active {
+    @apply px-4 py-2.5 bg-gray-900 border border-gray-700 rounded-md;
+    @apply text-gray-200 text-sm;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2.5 bg-purple-600 text-white rounded-md;
+    @apply hover:bg-purple-700 transition-all;
+  }
+
+  /* Badge patterns */
+  .badge-new {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1;
+    @apply bg-green-950 border border-green-900 rounded;
+    @apply text-xs font-medium text-green-400;
+  }
+
+  .badge-drop {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1;
+    @apply bg-red-950 border border-red-900 rounded;
+    @apply text-xs font-medium text-red-400;
+  }
+
+  .badge-neutral {
+    @apply inline-block bg-gray-950 px-3 py-1.5 rounded;
+    @apply border border-gray-800 text-sm text-gray-400;
+  }
+}
+
+/* Accessibility: Respect user's motion preferences (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .transition-all,
+  .transition-colors,
+  .transition-transform {
+    animation: none;
+    transition: none;
+  }
+}
