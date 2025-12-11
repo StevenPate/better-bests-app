@@ -23,11 +23,11 @@ function getCurrentWeekUrls() {
     'Northern CALIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723nc.txt',
     'Southern CALIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723sc.txt',
     'NEIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723ne.txt',
-    'SIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723so.txt',
+    'SIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723si.txt',
     'MPIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723mp.txt',
+    'MIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723mw.txt',
     'NAIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723na.txt',
-    'GLIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723gl.txt',
-    'MIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723mi.txt'
+    'GLIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723gl.txt'
   };
 }
 
