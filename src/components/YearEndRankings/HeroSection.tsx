@@ -49,7 +49,7 @@ export function HeroSection({ year, stats }: HeroSectionProps) {
             <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-background/50 border border-border/50">
               <MapPin className="w-5 h-5 text-primary" />
               <div className="text-left">
-                <div className="text-2xl font-bold">{stats.totalRegions || 8}</div>
+                <div className="text-2xl font-bold">{stats.totalRegions || 9}</div>
                 <div className="text-xs text-muted-foreground">Regions</div>
               </div>
             </div>

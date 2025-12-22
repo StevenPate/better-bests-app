@@ -11,6 +11,7 @@ const REGIONS = [
   { code: 'CALIBAS', name: 'SoCal' },
   { code: 'GLIBA', name: 'Great Lakes' },
   { code: 'MPIBA', name: 'Mountains & Plains' },
+  { code: 'MIBA', name: 'Midwest' },
   { code: 'NAIBA', name: 'New Atlantic' },
   { code: 'NEIBA', name: 'New England' },
   { code: 'SIBA', name: 'Southern' },
@@ -42,7 +43,7 @@ export function RegionalTabs({ year = 2025, category = 'regional_top10s', custom
 
   return (
     <Tabs value={activeRegion} onValueChange={setActiveRegion}>
-      <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8">
+      <TabsList className="grid w-full grid-cols-3 lg:grid-cols-9">
         {REGIONS.map((region) => (
           <TabsTrigger key={region.code} value={region.code}>
             {region.code}

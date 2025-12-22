@@ -37,6 +37,7 @@ const REGIONS = [
   { code: 'CALIBAS', name: 'Southern California' },
   { code: 'GLIBA', name: 'Great Lakes' },
   { code: 'MPIBA', name: 'Mountains & Plains' },
+  { code: 'MIBA', name: 'Midwest' },
   { code: 'NAIBA', name: 'New Atlantic' },
   { code: 'NEIBA', name: 'New England' },
   { code: 'SIBA', name: 'Southern' },
@@ -155,7 +156,7 @@ function CategoryContent({
         </div>
 
         <Tabs value={activeRegion} onValueChange={onRegionChange}>
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 mb-6">
+          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-9 mb-6">
             {REGIONS.map((region) => (
               <TabsTrigger key={region.code} value={region.code} className="text-xs sm:text-sm">
                 {region.code}
@@ -198,7 +199,7 @@ function CategoryContent({
         </div>
 
         <Tabs value={activeRegion} onValueChange={onRegionChange}>
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 mb-6">
+          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-9 mb-6">
             {REGIONS.map((region) => (
               <TabsTrigger key={region.code} value={region.code} className="text-xs sm:text-sm">
                 {region.code}
@@ -376,6 +377,7 @@ export default function Awards() {
   const { data: top10Calibas, isLoading: loadingCalibas } = useYearEndRankings('regional_top10s', year, 'CALIBAS');
   const { data: top10Gliba, isLoading: loadingGliba } = useYearEndRankings('regional_top10s', year, 'GLIBA');
   const { data: top10Mpiba, isLoading: loadingMpiba } = useYearEndRankings('regional_top10s', year, 'MPIBA');
+  const { data: top10Miba, isLoading: loadingMiba } = useYearEndRankings('regional_top10s', year, 'MIBA');
   const { data: top10Naiba, isLoading: loadingNaiba } = useYearEndRankings('regional_top10s', year, 'NAIBA');
   const { data: top10Neiba, isLoading: loadingNeiba } = useYearEndRankings('regional_top10s', year, 'NEIBA');
   const { data: top10Siba, isLoading: loadingSiba } = useYearEndRankings('regional_top10s', year, 'SIBA');
@@ -385,6 +387,7 @@ export default function Awards() {
     || loadingCalibas
     || loadingGliba
     || loadingMpiba
+    || loadingMiba
     || loadingNaiba
     || loadingNeiba
     || loadingSiba;
@@ -396,10 +399,10 @@ export default function Awards() {
     mostNational?.forEach((b) => isbns.add(b.isbn));
     mostEfficient?.forEach((b) => isbns.add(b.isbn));
     // Include all regional_top10s ISBNs
-    [top10Pnba, top10Caliban, top10Calibas, top10Gliba, top10Mpiba, top10Naiba, top10Neiba, top10Siba]
+    [top10Pnba, top10Caliban, top10Calibas, top10Gliba, top10Mpiba, top10Miba, top10Naiba, top10Neiba, top10Siba]
       .forEach((regionData) => regionData?.forEach((b) => isbns.add(b.isbn)));
     return Array.from(isbns);
-  }, [mostRegional, mostNational, mostEfficient, top10Pnba, top10Caliban, top10Calibas, top10Gliba, top10Mpiba, top10Naiba, top10Neiba, top10Siba]);
+  }, [mostRegional, mostNational, mostEfficient, top10Pnba, top10Caliban, top10Calibas, top10Gliba, top10Mpiba, top10Miba, top10Naiba, top10Neiba, top10Siba]);
 
   // Fetch publication years (only when frontlist filter is enabled)
   const { publicationYears, isLoading: pubYearsLoading } = usePublicationYears(
@@ -421,6 +424,7 @@ export default function Awards() {
     CALIBAS: top10Calibas || [],
     GLIBA: top10Gliba || [],
     MPIBA: top10Mpiba || [],
+    MIBA: top10Miba || [],
     NAIBA: top10Naiba || [],
     NEIBA: top10Neiba || [],
     SIBA: top10Siba || [],
@@ -447,7 +451,7 @@ export default function Awards() {
         <HeroSection
           year={year}
           stats={{
-            totalRegions: 8,
+            totalRegions: 9,
             totalWeeks: 52,
             totalBooks: 847,
           }}
