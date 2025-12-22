@@ -203,7 +203,7 @@ All fields are optional:
 ## Performance
 
 - **Duration**: 5-15 seconds (depends on number of regions)
-- **Data size**: ~1,200-2,000 books per week across 8 regions
+- **Data size**: ~1,200-2,000 books per week across 9 regions
 - **Batch size**: 1,000 rows per insert
 - **Network**: Parallel fetching (8 concurrent requests)
 

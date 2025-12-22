@@ -53,8 +53,8 @@ export function MethodologyCard() {
             </ul>
 
             <p className="text-xs text-muted-foreground mt-4">
-              Data includes all 2025 appearances across 8 regional indie bookseller associations:
-              PNBA, Northern California, Southern California, GLIBA, MPIBA, NAIBA, NEIBA, and SIBA.
+              Data includes all 2025 appearances across 9 regional indie bookseller associations:
+              PNBA, Northern California, Southern California, GLIBA, MPIBA, MIBA, NAIBA, NEIBA, and SIBA.
             </p>
           </CardContent>
         </CollapsibleContent>

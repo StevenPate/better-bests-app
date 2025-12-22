@@ -105,7 +105,7 @@ const ReviewDefaultRedirect = () => {
  * with filter/audience combinations and legacy route redirects.
  *
  * Features:
- * - Region-based routing (8 regional bestseller lists)
+ * - Region-based routing (9 regional bestseller lists)
  * - Dynamic filter routes generated from schema
  * - React Query for data caching and state management
  * - Legacy URL backwards compatibility

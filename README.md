@@ -5,19 +5,19 @@
 [![Vite](https://img.shields.io/badge/Vite-5.4-646cff.svg)](https://vitejs.dev/)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ecf8e.svg)](https://supabase.com/)
 
-A React/TypeScript application for tracking and analyzing regional independent bookseller bestseller lists across all 8 major bookselling regions. Built for Port Book and News, this app provides comprehensive tools for bookstore staff including automated data collection, cross-regional discovery, performance analytics, PDF/CSV export, and historical tracking.
+A React/TypeScript application for tracking and analyzing regional independent bookseller bestseller lists across all 9 major bookselling regions. Built for Port Book and News, this app provides comprehensive tools for bookstore staff including automated data collection, cross-regional discovery, performance analytics, PDF/CSV export, and historical tracking.
 
 ## 🌟 Features
 
 ### Core Functionality
-- **Automated Data Collection** - Weekly cron jobs fetch current bestseller lists from all 8 regional associations
-- **Multi-Region Support** - Track bestsellers across PNBA, SIBA, GLIBA, CALIBAN, CALIBAS, MPIBA, NAIBA, and NEIBA
+- **Automated Data Collection** - Weekly cron jobs fetch current bestseller lists from all 9 regional associations
+- **Multi-Region Support** - Track bestsellers across PNBA, SIBA, GLIBA, CALIBAN, CALIBAS, MPIBA, MIBA, NAIBA, and NEIBA
 - **Historical Tracking** - 52-week data retention with automated adds/drops comparison
 - **Audience Classification** - Filter by Adult, Teen, and Children's categories
 - **Smart Search** - Real-time search across titles, authors, and ISBNs
 
 ### Regional Analytics
-- **Regional Performance Heatmaps** - GitHub-style visualization showing book performance across all 8 regions over 26/52 weeks
+- **Regional Performance Heatmaps** - GitHub-style visualization showing book performance across all 9 regions over 26/52 weeks
 - **Performance Scoring** - Proprietary algorithm calculates book performance scores based on rank and consistency
 - **Cross-Regional Discovery** - "Elsewhere" view identifies bestselling books from other regions that have never appeared on your local list
 - **Trend Analysis** - Track books moving up/down across multiple regional lists simultaneously
@@ -337,7 +337,7 @@ VITE_ENABLE_DEBUG_LOGS="true"
 - 9:45 AM PDT (16:45 UTC)
 - 10:00 AM PDT (17:00 UTC)
 
-**Regional Bestseller Sync** - Weekly updates for all 8 regions:
+**Regional Bestseller Sync** - Weekly updates for all 9 regions:
 - **Primary**: 10:15 AM PDT (17:15 UTC) on Wednesdays
 - **Retry**: 10:45 AM PDT (17:45 UTC) if data missing
 
@@ -427,7 +427,7 @@ SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 ### Phase 3: Multi-Region Support (Nov 2025)
 
 ✅ **Regional Data Infrastructure**
-- Support for all 8 regional bookseller associations
+- Support for all 9 regional bookseller associations
 - Automated weekly data collection via cron jobs
 - `regional_bestsellers` table with 52-week retention
 - Normalized ISBN handling across all data sources
@@ -446,7 +446,7 @@ SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 
 ✅ **Book Detail Pages**
 - Individual book pages with complete cross-regional history
-- Interactive heatmaps showing performance across all 8 regions
+- Interactive heatmaps showing performance across all 9 regions
 - Performance metrics cards (2025 yearly scores)
 - Regional breakdown with strength visualization
 
@@ -585,7 +585,7 @@ Private - All Rights Reserved
 
 ## 🙏 Acknowledgments
 
-- PNBA and all 8 regional bookseller associations for data
+- All 9 regional bookseller associations for data
 - American Booksellers Association (BookWeb.org)
 - Google Books API
 - Port Book and News team

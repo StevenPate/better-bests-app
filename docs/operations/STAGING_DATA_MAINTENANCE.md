@@ -28,7 +28,7 @@ This guide covers the maintenance and refresh procedures for synthetic test data
 
 When refreshing staging data, ensure coverage of:
 
-- [ ] **All 8 regions** (PNBA, SIBA, CALIBAN, CALIBAS, GLIBA, MPIBA, NAIBA, NEIBA)
+- [ ] **All 9 regions** (PNBA, SIBA, CALIBAN, CALIBAS, GLIBA, MPIBA, MIBA, NAIBA, NEIBA)
 - [ ] **Books in multiple regional lists simultaneously** (e.g., same book on PNBA and SIBA)
 - [ ] **Books unique to single regions** (for "Elsewhere" feature testing)
 - [ ] **Regional adds/drops scenarios** (books new to one region, dropped from another)
@@ -223,7 +223,7 @@ After refreshing data, test these features:
 
 ### Core Features
 - [ ] Home page loads without errors
-- [ ] All 8 regions appear in navigation (when multi-region enabled)
+- [ ] All 9 regions appear in navigation (when multi-region enabled)
 - [ ] Current week bestseller list displays correctly
 - [ ] Filters work (adds/drops/all)
 - [ ] Audience filters work (Adult/Teen/Children)

@@ -86,7 +86,7 @@ export default function Methodology() {
               <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">RSI = 12.5%</span>
-                  <span className="text-sm text-muted-foreground">Perfectly even across 8 regions</span>
+                  <span className="text-sm text-muted-foreground">Perfectly even across 9 regions</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">RSI = 35%</span>
@@ -193,7 +193,7 @@ export default function Methodology() {
                 <div className="bg-muted/30 rounded-lg p-4 space-y-3 text-sm">
                   <h4 className="font-medium">Criteria:</h4>
                   <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                    <li>Must appear in at least 5 of 8 regions</li>
+                    <li>Must appear in at least 5 of 9 regions</li>
                     <li>Ranked by RSI variance (lowest first)</li>
                   </ul>
 
@@ -251,10 +251,10 @@ export default function Methodology() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-4">
-                Rankings include all {year} appearances across 8 regional indie bookseller associations:
+                Rankings include all {year} appearances across 9 regional indie bookseller associations:
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {['PNBA', 'CALIBA (NorCal)', 'CALIBA (SoCal)', 'GLIBA', 'MPIBA', 'NAIBA', 'NEIBA', 'SIBA'].map((region) => (
+                {['PNBA', 'CALIBA (NorCal)', 'CALIBA (SoCal)', 'GLIBA', 'MPIBA', 'MIBA', 'NAIBA', 'NEIBA', 'SIBA'].map((region) => (
                   <Badge key={region} variant="outline" className="justify-center py-2">
                     {region}
                   </Badge>

@@ -57,7 +57,7 @@ Better Bestsellers supports multiple environments for safe feature development:
 | `VITE_GOOGLE_BOOKS_API_KEY` | None | Higher quota for Google Books API |
 | `VITE_ENABLE_DEBUG_LOGS` | `false` | Verbose logging (debug/info messages) |
 | `VITE_ENVIRONMENT` | `"production"` | Environment name for identification |
-| `VITE_ENABLE_MULTI_REGION` | `false` | Multi-region features (8 regional associations) |
+| `VITE_ENABLE_MULTI_REGION` | `false` | Multi-region features (9 regional associations) |
 
 ## Feature Flags
 
@@ -65,7 +65,7 @@ Better Bestsellers supports multiple environments for safe feature development:
 
 Controls access to multi-region functionality:
 - `false` (default): PNBA-only mode (production)
-- `true`: All 8 regions enabled (PNBA, SIBA, CALIBAN, CALIBAS, GLIBA, MPIBA, NAIBA, NEIBA)
+- `true`: All 9 regions enabled (PNBA, SIBA, CALIBAN, CALIBAS, GLIBA, MPIBA, MIBA, NAIBA, NEIBA)
 
 **Default-Off Safety:**
 All feature flags default to `false` in production. Per-environment overrides allow staging to test features before production rollout.
