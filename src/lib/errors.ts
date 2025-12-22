@@ -25,6 +25,15 @@ export enum ErrorCode {
   // External service errors
   GOOGLE_BOOKS_TIMEOUT = 'GOOGLE_BOOKS_TIMEOUT',
   GOOGLE_BOOKS_API_ERROR = 'GOOGLE_BOOKS_API_ERROR',
+  API_RATE_LIMIT = 'API_RATE_LIMIT',
+
+  // Database/cache errors
+  DATABASE_ERROR = 'DATABASE_ERROR',
+  CACHE_ERROR = 'CACHE_ERROR',
+
+  // Configuration errors
+  CONFIG_ERROR = 'CONFIG_ERROR',
+  REGION_NOT_FOUND = 'REGION_NOT_FOUND',
 
   // Authentication errors
   AUTH_REQUIRED = 'AUTH_REQUIRED',
@@ -43,6 +52,11 @@ const defaultMessages: Record<ErrorCode, string> = {
   [ErrorCode.CSV_EXPORT_FAILED]: 'Failed to export CSV',
   [ErrorCode.GOOGLE_BOOKS_TIMEOUT]: 'Google Books request timed out',
   [ErrorCode.GOOGLE_BOOKS_API_ERROR]: 'Google Books API error',
+  [ErrorCode.API_RATE_LIMIT]: 'API rate limit exceeded',
+  [ErrorCode.DATABASE_ERROR]: 'Database operation failed',
+  [ErrorCode.CACHE_ERROR]: 'Cache operation failed',
+  [ErrorCode.CONFIG_ERROR]: 'Configuration error',
+  [ErrorCode.REGION_NOT_FOUND]: 'Region not found',
   [ErrorCode.AUTH_REQUIRED]: 'Authentication required',
   [ErrorCode.UNKNOWN_ERROR]: 'An unknown error occurred',
 };
@@ -89,6 +103,31 @@ const userMessages: Record<ErrorCode, UserMessage> = {
     short: "Google Books API error.",
     long: "We encountered an issue fetching book metadata. The list will display without genre information.",
     recoveryAction: 'Continue',
+  },
+  [ErrorCode.API_RATE_LIMIT]: {
+    short: "Too many requests.",
+    long: "We're being rate limited by an external service. Please wait a moment and try again.",
+    recoveryAction: 'Wait & Retry',
+  },
+  [ErrorCode.DATABASE_ERROR]: {
+    short: "Database error.",
+    long: "We encountered an issue accessing the database. Please try again or contact support.",
+    recoveryAction: 'Retry',
+  },
+  [ErrorCode.CACHE_ERROR]: {
+    short: "Cache error.",
+    long: "We encountered an issue with cached data. Refreshing will fetch fresh data.",
+    recoveryAction: 'Refresh',
+  },
+  [ErrorCode.CONFIG_ERROR]: {
+    short: "Configuration error.",
+    long: "The application is missing required configuration. Please contact support.",
+    recoveryAction: 'Contact Support',
+  },
+  [ErrorCode.REGION_NOT_FOUND]: {
+    short: "Region not found.",
+    long: "The selected region is not available. Please select a different region.",
+    recoveryAction: 'Select Region',
   },
   [ErrorCode.AUTH_REQUIRED]: {
     short: "Authentication required.",
@@ -248,6 +287,62 @@ export class CsvError extends ExportError {
   ) {
     super(ErrorCode.CSV_EXPORT_FAILED, context, cause);
     this.name = 'CsvError';
+  }
+}
+
+/**
+ * Error thrown when database operations fail
+ */
+export class DatabaseError extends AppError {
+  constructor(
+    context: Record<string, unknown> = {},
+    message?: string,
+    cause?: unknown
+  ) {
+    super(ErrorCode.DATABASE_ERROR, context, message ?? defaultMessages[ErrorCode.DATABASE_ERROR], cause);
+    this.name = 'DatabaseError';
+  }
+}
+
+/**
+ * Error thrown when cache operations fail
+ */
+export class CacheError extends AppError {
+  constructor(
+    context: Record<string, unknown> = {},
+    message?: string,
+    cause?: unknown
+  ) {
+    super(ErrorCode.CACHE_ERROR, context, message ?? defaultMessages[ErrorCode.CACHE_ERROR], cause);
+    this.name = 'CacheError';
+  }
+}
+
+/**
+ * Error thrown when configuration is missing or invalid
+ */
+export class ConfigError extends AppError {
+  constructor(
+    context: Record<string, unknown> = {},
+    message?: string,
+    cause?: unknown
+  ) {
+    super(ErrorCode.CONFIG_ERROR, context, message ?? defaultMessages[ErrorCode.CONFIG_ERROR], cause);
+    this.name = 'ConfigError';
+  }
+}
+
+/**
+ * Error thrown when a region is not found or invalid
+ */
+export class RegionError extends AppError {
+  constructor(
+    context: Record<string, unknown> = {},
+    message?: string,
+    cause?: unknown
+  ) {
+    super(ErrorCode.REGION_NOT_FOUND, context, message ?? defaultMessages[ErrorCode.REGION_NOT_FOUND], cause);
+    this.name = 'RegionError';
   }
 }
 

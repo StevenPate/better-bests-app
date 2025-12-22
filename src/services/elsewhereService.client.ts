@@ -17,6 +17,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
+import { DatabaseError, logError } from '@/lib/errors';
 import {
   AggregateMetrics,
   ElsewhereBook,
@@ -79,8 +80,12 @@ async function fetchTargetRegionIsbns(targetRegion: string): Promise<Set<string>
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (error) {
-      logger.error('elsewhereService.client', 'Error fetching target region ISBNs:', error);
-      throw new Error(error.message);
+      logError('elsewhereService.client', error, { operation: 'fetch_target_region_isbns', targetRegion });
+      throw new DatabaseError(
+        { resource: 'regional_bestsellers', operation: 'query', region: targetRegion },
+        error.message,
+        error
+      );
     }
 
     if (!data || data.length === 0) {
@@ -133,8 +138,12 @@ async function fetchRegionalBooks(
     const { data, error } = await query;
 
     if (error) {
-      logger.error('elsewhereService.client', 'Error fetching regional books:', error);
-      throw new Error(error.message);
+      logError('elsewhereService.client', error, { operation: 'fetch_regional_books', targetRegion });
+      throw new DatabaseError(
+        { resource: 'regional_bestsellers', operation: 'query', excludeRegion: targetRegion },
+        error.message,
+        error
+      );
     }
 
     if (!data || data.length === 0) {
@@ -345,6 +354,23 @@ function applyFiltersAndSorting(
   return filtered;
 }
 
+/**
+ * Fetch elsewhere books via client-side database queries
+ *
+ * This is a fallback implementation when edge functions are unavailable.
+ * It performs the same logic as the edge function but in the browser.
+ *
+ * @param filters - Filters for the query
+ * @param filters.targetRegion - Region to exclude from results (books that appeared here are filtered out)
+ * @param filters.comparisonRegions - Regions to search for books (empty = all regions)
+ * @param filters.sortBy - Sort order: 'newest' | 'most_regions' | 'best_rank' | 'total_weeks'
+ * @param filters.page - Page number for pagination (1-indexed)
+ * @param filters.pageSize - Number of results per page
+ * @param filters.minWeeksOnList - Minimum weeks a book must have appeared
+ * @param filters.minRegions - Minimum number of regions a book must appear in
+ * @returns Promise<ElsewhereDataResponse> Paginated list of books not on target region
+ * @throws {DatabaseError} When database queries fail
+ */
 export async function fetchElsewhereBooks(
   filters: ElsewhereFilters
 ): Promise<ElsewhereDataResponse> {

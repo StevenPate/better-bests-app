@@ -21,6 +21,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
+import { FetchError, ErrorCode, logError } from '@/lib/errors';
 import {
   ElsewhereFilters,
   ElsewhereDataResponse,
@@ -48,14 +49,21 @@ export async function fetchElsewhereBooks(
     });
 
     if (error) {
-      logger.error('elsewhereService', 'Edge function error:', error);
-      throw new Error(error.message || 'Failed to fetch elsewhere books');
+      logError('elsewhereService', error, { operation: 'fetch_elsewhere_books' });
+      throw new FetchError(
+        ErrorCode.DATA_FETCH_FAILED,
+        { resource: 'elsewhere_books', operation: 'edge_function', reason: error.message },
+        error
+      );
     }
 
     if (!data || !data.success) {
       const errorMsg = data?.error || 'Unknown error from edge function';
-      logger.error('elsewhereService', 'Edge function returned error:', errorMsg);
-      throw new Error(errorMsg);
+      logError('elsewhereService', new Error(errorMsg), { operation: 'fetch_elsewhere_books' });
+      throw new FetchError(
+        ErrorCode.DATA_FETCH_FAILED,
+        { resource: 'elsewhere_books', operation: 'edge_function', reason: errorMsg }
+      );
     }
 
     const elapsed = Date.now() - startTime;
@@ -66,7 +74,15 @@ export async function fetchElsewhereBooks(
     return response as ElsewhereDataResponse;
 
   } catch (error) {
-    logger.error('elsewhereService', 'Error calling edge function:', error);
-    throw error;
+    // Re-throw FetchErrors as-is, wrap others
+    if (error instanceof FetchError) {
+      throw error;
+    }
+    logError('elsewhereService', error, { operation: 'fetch_elsewhere_books' });
+    throw new FetchError(
+      ErrorCode.DATA_FETCH_FAILED,
+      { resource: 'elsewhere_books', operation: 'edge_function' },
+      error
+    );
   }
 }

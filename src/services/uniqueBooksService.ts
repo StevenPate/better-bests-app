@@ -8,6 +8,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
+import { DatabaseError, logError } from '@/lib/errors';
 
 const PAGE_SIZE = 1000; // Supabase range chunk size
 const LOOKBACK_DAYS = 365; // One year
@@ -66,8 +67,12 @@ async function fetchRecentRegionIsbns(region: string): Promise<Map<string, Regio
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (error) {
-      logger.error('uniqueBooksService', 'Error fetching recent region ISBNs:', error);
-      throw new Error(error.message);
+      logError('uniqueBooksService', error, { operation: 'fetch_recent_region_isbns', region });
+      throw new DatabaseError(
+        { resource: 'regional_bestsellers', operation: 'query', region },
+        error.message,
+        error
+      );
     }
 
     if (!data || data.length === 0) {
@@ -112,8 +117,12 @@ async function buildPastYearRegionMap(isbns: string[], cutoffDate: string): Prom
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
       if (error) {
-        logger.error('uniqueBooksService', 'Error fetching past year region data:', error);
-        throw new Error(error.message);
+        logError('uniqueBooksService', error, { operation: 'build_past_year_region_map' });
+        throw new DatabaseError(
+          { resource: 'regional_bestsellers', operation: 'query', batchSize: isbnBatch.length },
+          error.message,
+          error
+        );
       }
 
       if (!data || data.length === 0) {
@@ -162,6 +171,17 @@ function calculateBookMetrics(appearances: RegionalBestsellerRow[]): {
 
 /**
  * Fetch books unique to the specified region
+ *
+ * Returns books that have ONLY appeared on the specified region's bestseller lists
+ * in the past year, with no appearances on any other region's lists during that period.
+ *
+ * @param region - Region code (e.g., 'PNBA', 'SIBA', 'GLIBA')
+ * @returns Promise<UniqueBooksResponse> List of unique books with metrics
+ * @throws {DatabaseError} When database queries fail
+ *
+ * @example
+ * const response = await fetchUniqueBooks('PNBA');
+ * console.log(`Found ${response.totalCount} unique books in PNBA`);
  */
 export async function fetchUniqueBooks(region: string): Promise<UniqueBooksResponse> {
   const startTime = Date.now();

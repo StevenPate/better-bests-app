@@ -1,4 +1,5 @@
 import { REGIONS, getRegionByAbbreviation } from '@/config/regions';
+import { RegionError } from '@/lib/errors';
 
 export class DateUtils {
   static getMostRecentWednesday(): Date {
@@ -46,7 +47,10 @@ export class DateUtils {
   static getRegionalListUrls(regionCode: string, weekDate?: Date): { current: string; previous: string } {
     const region = getRegionByAbbreviation(regionCode);
     if (!region) {
-      throw new Error(`Unknown region: ${regionCode}`);
+      throw new RegionError(
+        { regionCode, operation: 'getRegionalListUrls' },
+        `Unknown region: ${regionCode}`
+      );
     }
 
     const currentWednesday = weekDate || this.getMostRecentWednesday();

@@ -13,6 +13,7 @@ import { useState, useEffect } from 'react';
 import { BestsellerParser } from '@/utils/bestsellerParser';
 import { BestsellerList } from '@/types/bestseller';
 import { logger } from '@/lib/logger';
+import { FetchError, ErrorCode } from '@/lib/errors';
 import { useRegion } from './useRegion';
 
 export interface UseBestsellerDataOptions {
@@ -62,7 +63,11 @@ export function useBestsellerData(options: UseBestsellerDataOptions = {}): UseBe
       });
 
       if (!result) {
-        throw new Error('No data received from BestsellerParser');
+        throw new FetchError(
+          ErrorCode.DATA_FETCH_FAILED,
+          { resource: 'bestseller_data', region: currentRegion.abbreviation, comparisonWeek },
+          'No data received from BestsellerParser'
+        );
       }
 
       return result.current;
