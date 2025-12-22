@@ -55,14 +55,14 @@ describe('MainNav', () => {
       expect(screen.getByTestId('region-selector')).toBeInTheDocument();
     });
 
-    it('should render Controls button', () => {
+    it('should render ThemeToggle component', () => {
       render(
         <MemoryRouter>
           <MainNav />
         </MemoryRouter>
       );
 
-      expect(screen.getByRole('button', { name: /controls/i })).toBeInTheDocument();
+      expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
     });
   });
 

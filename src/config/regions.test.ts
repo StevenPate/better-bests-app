@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 import { REGIONS, DEFAULT_REGION, getRegionByAbbreviation, getRegionByFileCode } from './regions';
 
 describe('Region Configuration', () => {
-  it('should have exactly 8 configured regions', () => {
-    expect(REGIONS).toHaveLength(8);
+  it('should have exactly 9 configured regions', () => {
+    expect(REGIONS).toHaveLength(9);
   });
 
   it('should default to PNBA', () => {

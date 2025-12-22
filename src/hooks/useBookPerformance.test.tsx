@@ -18,7 +18,10 @@ vi.mock('@/integrations/supabase/client', () => ({
                 total_score: 1234.5,
                 weeks_on_chart: 14,
                 regions_appeared: 5,
+                max_weekly_score: 150.0,
+                avg_weekly_score: 88.2,
                 avg_score_per_week: 88.2,
+                rsi_variance: 0.05,
               },
               error: null,
             })),
@@ -55,7 +58,10 @@ describe('useBookPerformance', () => {
       total_score: 1234.5,
       weeks_on_chart: 14,
       regions_appeared: 5,
+      max_weekly_score: 150.0,
+      avg_weekly_score: 88.2,
       avg_score_per_week: 88.2,
+      rsi_variance: 0.05,
     });
   });
 });

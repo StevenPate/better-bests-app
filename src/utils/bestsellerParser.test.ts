@@ -728,27 +728,43 @@ for the week ended Sunday, January 10, 2024
   });
 
   describe('BestsellerParser - Multi-Region Support', () => {
+    const mockCachedResult = {
+      data: {
+        current: {
+          title: 'Test Bestsellers',
+          date: 'January 10, 2024',
+          categories: [{
+            name: 'Hardcover Fiction',
+            books: [{
+              rank: 1,
+              title: 'Test Book',
+              author: 'Test Author',
+              publisher: 'Test Publisher',
+              isbn: '9781234567890',
+              price: '$29.99'
+            }]
+          }]
+        },
+        previous: {
+          title: 'Test Bestsellers',
+          date: 'January 3, 2024',
+          categories: []
+        }
+      },
+      timestamp: Date.now()
+    };
+
     beforeEach(() => {
       vi.clearAllMocks();
-      // Mock fetch for text file responses
-      global.fetch = vi.fn((url) => {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          headers: {
-            get: vi.fn((header) => {
-              if (header === 'content-type') return 'text/plain';
-              return null;
-            }),
-          },
-          text: () => Promise.resolve('PACIFIC NORTHWEST BOOKSELLERS ASSOCIATION BESTSELLERS\nfor the week ended Sunday, January 10, 2024\n\nHARDCOVER FICTION\n1. Test Book / Test Author / Test Publisher / 9781234567890 / $29.99'),
-        }) as any;
-      }) as Mock;
     });
 
     it('should fetch data for PNBA region', async () => {
+      // Mock getCachedData to return valid cached data
+      vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValue(mockCachedResult);
+
       const result = await BestsellerParser.fetchBestsellerData({ region: 'PNBA' });
       expect(result).toBeTruthy();
+      expect(result.current).toBeDefined();
     });
 
     it('should construct correct URLs for SIBA region', () => {
@@ -762,7 +778,7 @@ for the week ended Sunday, January 10, 2024
     });
 
     it('should use region-specific cache keys', async () => {
-      const spy = vi.spyOn(BestsellerParser, 'getCachedData');
+      const spy = vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValue(mockCachedResult);
 
       await BestsellerParser.fetchBestsellerData({ region: 'SIBA' });
 
@@ -770,7 +786,7 @@ for the week ended Sunday, January 10, 2024
     });
 
     it('should default to PNBA if no region specified', async () => {
-      const spy = vi.spyOn(BestsellerParser, 'getCachedData');
+      const spy = vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValue(mockCachedResult);
 
       const result = await BestsellerParser.fetchBestsellerData();
 

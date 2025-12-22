@@ -33,7 +33,7 @@ describe('useRegion', () => {
 
   it('should provide all regions', () => {
     const { result } = renderHook(() => useRegion(), { wrapper });
-    expect(result.current.regions).toHaveLength(8);
+    expect(result.current.regions).toHaveLength(9);
   });
 
   it('should have switchRegion function', () => {

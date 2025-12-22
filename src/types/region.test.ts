@@ -15,9 +15,10 @@ describe('Region Types', () => {
     expect(REGION_ABBREVIATIONS).toContain('CALIBAS');
     expect(REGION_ABBREVIATIONS).toContain('GLIBA');
     expect(REGION_ABBREVIATIONS).toContain('MPIBA');
+    expect(REGION_ABBREVIATIONS).toContain('MIBA');
     expect(REGION_ABBREVIATIONS).toContain('NAIBA');
     expect(REGION_ABBREVIATIONS).toContain('NEIBA');
     expect(REGION_ABBREVIATIONS).toContain('SIBA');
-    expect(REGION_ABBREVIATIONS).toHaveLength(8);
+    expect(REGION_ABBREVIATIONS).toHaveLength(9);
   });
 });

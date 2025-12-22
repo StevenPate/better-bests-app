@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fetchGoogleBooksCategory, fetchGoogleBooksCategoriesBatch, clearGoogleBooksCache } from './googleBooksApi';
+import { fetchGoogleBooksCategory, fetchGoogleBooksCategoriesBatch, clearGoogleBooksCache, clearGoogleBooksInfoCache } from './googleBooksApi';
 
 // Mock Supabase client
 vi.mock('@/integrations/supabase/client', () => ({
@@ -39,6 +39,7 @@ describe('fetchGoogleBooksCategory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearGoogleBooksCache();
+    clearGoogleBooksInfoCache();
   });
 
   it('should fetch category from Google Books API on cache miss', async () => {
@@ -118,6 +119,7 @@ describe('fetchGoogleBooksCategoriesBatch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearGoogleBooksCache();
+    clearGoogleBooksInfoCache();
   });
 
   it('should fetch multiple ISBNs in parallel', async () => {

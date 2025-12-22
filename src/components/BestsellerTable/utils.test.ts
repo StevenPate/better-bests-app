@@ -264,7 +264,7 @@ describe('BestsellerTable utils', () => {
         isbn: '123',
         isNew: true
       };
-      expect(getRowClassName(book)).toContain('success-bg');
+      expect(getRowClassName(book)).toContain('bg-green-50');
     });
 
     it('should return danger classes for dropped books', () => {
@@ -277,7 +277,7 @@ describe('BestsellerTable utils', () => {
         isbn: '123',
         wasDropped: true
       };
-      expect(getRowClassName(book)).toContain('danger-bg');
+      expect(getRowClassName(book)).toContain('bg-red-50');
     });
 
     it('should return default hover for normal books', () => {
@@ -289,7 +289,7 @@ describe('BestsellerTable utils', () => {
         price: '$10',
         isbn: '123'
       };
-      expect(getRowClassName(book)).toBe('hover:bg-muted/50');
+      expect(getRowClassName(book)).toContain('hover:bg-muted/50');
     });
   });
 

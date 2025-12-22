@@ -493,14 +493,14 @@ describe('BestsellerTable', () => {
       renderWithRouter(<BestsellerTable category={mockCategory} />);
 
       const newBookRow = screen.getByText('New Book').closest('tr');
-      expect(newBookRow).toHaveClass('bg-[hsl(var(--success-bg))]');
+      expect(newBookRow).toHaveClass('bg-green-50');
     });
 
     it('should apply correct styling to dropped books', () => {
       renderWithRouter(<BestsellerTable category={mockCategory} />);
 
       const droppedBookRow = screen.getByText('Dropped Book').closest('tr');
-      expect(droppedBookRow).toHaveClass('bg-[hsl(var(--danger-bg))]');
+      expect(droppedBookRow).toHaveClass('bg-red-50');
     });
   });
 
