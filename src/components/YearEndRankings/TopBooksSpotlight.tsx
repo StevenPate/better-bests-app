@@ -119,6 +119,11 @@ function SpotlightCard({
                 {book.metadata.weeksOnChart} weeks
               </Badge>
             )}
+            {book.metadata.rsi && (
+              <Badge variant="outline" className="text-xs">
+                {(book.metadata.rsi * 100).toFixed(0)}% regional
+              </Badge>
+            )}
           </div>
         </div>
       </div>
