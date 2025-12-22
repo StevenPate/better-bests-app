@@ -408,6 +408,93 @@ global.fetch = vi.fn(() =>
 ) as any;
 ```
 
+### Testing Typed Errors
+
+The application uses typed errors from `src/lib/errors.ts`. Here's how to test them:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import {
+  AppError,
+  FetchError,
+  DatabaseError,
+  ErrorCode,
+  isAppError,
+  hasErrorCode
+} from '@/lib/errors';
+
+describe('error handling', () => {
+  it('should throw typed errors with context', async () => {
+    const fetchData = async () => {
+      throw new FetchError(
+        ErrorCode.DATA_FETCH_FAILED,
+        { resource: 'bestseller_data', region: 'PNBA' }
+      );
+    };
+
+    await expect(fetchData()).rejects.toThrow(FetchError);
+  });
+
+  it('should identify error types', () => {
+    const error = new DatabaseError(
+      { table: 'regional_bestsellers' },
+      'Connection failed'
+    );
+
+    expect(isAppError(error)).toBe(true);
+    expect(hasErrorCode(error, ErrorCode.DATABASE_ERROR)).toBe(true);
+    expect(error.context.table).toBe('regional_bestsellers');
+  });
+
+  it('should provide user-friendly messages', () => {
+    const error = new FetchError(ErrorCode.DATA_FETCH_FAILED);
+
+    // Error has structured logging payload
+    const payload = error.toLogPayload();
+    expect(payload.code).toBe('DATA_FETCH_FAILED');
+    expect(payload.timestamp).toBeDefined();
+  });
+});
+```
+
+#### Testing Services That Throw Typed Errors
+
+```typescript
+import { describe, it, expect, vi } from 'vitest';
+import { fetchElsewhereBooks } from '@/services/elsewhereService';
+import { FetchError, ErrorCode } from '@/lib/errors';
+
+// Mock Supabase to return error
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    functions: {
+      invoke: vi.fn(() => Promise.resolve({
+        data: null,
+        error: { message: 'Edge function failed' }
+      }))
+    }
+  }
+}));
+
+describe('elsewhereService error handling', () => {
+  it('should throw FetchError on edge function failure', async () => {
+    await expect(fetchElsewhereBooks({ targetRegion: 'PNBA', comparisonRegions: [] }))
+      .rejects
+      .toThrow(FetchError);
+  });
+
+  it('should include context in error', async () => {
+    try {
+      await fetchElsewhereBooks({ targetRegion: 'PNBA', comparisonRegions: [] });
+    } catch (error) {
+      expect(error).toBeInstanceOf(FetchError);
+      expect((error as FetchError).code).toBe(ErrorCode.DATA_FETCH_FAILED);
+      expect((error as FetchError).context.resource).toBe('elsewhere_books');
+    }
+  });
+});
+```
+
 ---
 
 ## Coverage Requirements
@@ -423,16 +510,21 @@ global.fetch = vi.fn(() =>
 
 ### Current Coverage Status
 
-| Module | Coverage | Tests | Status |
-|--------|----------|-------|--------|
-| `dateUtils.ts` | 100% | 14 | ✅ Complete |
-| `bestsellerParser.ts` | 43.72% | 33 | ✅ Complete |
-| `csvExporter.ts` | 100% | 26 | ✅ Complete |
-| `BestsellerTable.tsx` | 70.19% | 37 | ✅ Complete |
-| `googleBooksApi.ts` | ~60% | 8 | ✅ Complete |
-| `pdfGenerator.ts` | 0% | 0 | ⏳ Optional |
+| Module | Tests | Status |
+|--------|-------|--------|
+| `dateUtils.ts` | 14 | ✅ Complete |
+| `bestsellerParser.ts` | 39 | ✅ Complete |
+| `csvExporter.ts` | 33 | ✅ Complete |
+| `BestsellerTable.tsx` | 37 | ✅ Complete |
+| `googleBooksApi.ts` | 8 | ✅ Complete |
+| `pdfGenerator.ts` | 4 | ✅ Complete |
+| `errors.ts` | 30 | ✅ Complete |
+| Status components | 53 | ✅ Complete |
+| Navigation components | 35 | ✅ Complete |
+| Hooks (filters, region, data) | 45 | ✅ Complete |
+| Config & utilities | 108 | ✅ Complete |
 
-**Total: 118 tests passing**
+**Total: 506 tests passing across 34 test files**
 
 ### Checking Coverage
 
@@ -698,7 +790,10 @@ npm test:ui
 - `src/utils/dateUtils.test.ts` - Utility function tests
 - `src/utils/bestsellerParser.test.ts` - Complex business logic
 - `src/services/csvExporter.test.ts` - Service layer tests
+- `src/services/googleBooksApi.test.ts` - API integration with caching
+- `src/lib/errors.test.ts` - Error classes and type guards
 - `src/components/BestsellerTable.test.tsx` - Component tests
+- `src/components/ui/status/*.test.tsx` - Accessibility testing
 
 ---
 
@@ -746,6 +841,6 @@ import {
 
 ---
 
-**Last Updated:** October 2024
+**Last Updated:** December 2025
 
 **Questions?** See `/docs/implementation/IMPLEMENTATION_CHECKLIST.md` or ask the team.
