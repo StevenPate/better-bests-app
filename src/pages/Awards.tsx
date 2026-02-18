@@ -13,7 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { BookRanking } from '@/types/performance';
 import { Footer } from '@/components/Footer';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Book, Sparkles } from 'lucide-react';
+import { Book, Sparkles, Info } from 'lucide-react';
+import { useAvailableYears } from '@/hooks/useAvailableYears';
+import { useYearStats } from '@/hooks/useYearStats';
+import { YearTabs } from '@/components/YearEndRankings/YearTabs';
 
 // URL slug to CategoryType mapping
 const CATEGORY_SLUGS: Record<string, CategoryType> = {
@@ -43,7 +46,7 @@ const REGIONS = [
   { code: 'SIBA', name: 'Southern' },
 ];
 
-const FRONTLIST_YEARS = [2024, 2025];
+const FRONTLIST_YEARS = [new Date().getFullYear() - 1, new Date().getFullYear()];
 
 function LoadingSkeleton() {
   return (
@@ -82,6 +85,8 @@ function RankingDisplay({ books, subtitle }: { books: BookRanking[]; subtitle?: 
 interface CategoryContentProps {
   category: CategoryType;
   year: number;
+  isComplete: boolean;
+  weeksOfData: number;
   mostRegionalByRegion?: Record<string, BookRanking[]>;
   regionalTop10sByRegion?: Record<string, BookRanking[]>;
   regionalTop10sLoading: boolean;
@@ -115,6 +120,8 @@ function filterBooks(
 function CategoryContent({
   category,
   year,
+  isComplete,
+  weeksOfData,
   mostRegionalByRegion,
   regionalTop10sByRegion,
   regionalTop10sLoading,
@@ -175,6 +182,12 @@ function CategoryContent({
                   <p className="text-sm text-muted-foreground">
                     Books where regional performance in {region.code} had the greatest impact
                   </p>
+                  {!isComplete && weeksOfData < 52 && (
+                    <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground mt-2">
+                      <Info className="w-4 h-4" />
+                      Based on {weeksOfData} weeks of data. Rankings may shift as the year progresses.
+                    </p>
+                  )}
                 </div>
 
                 {showFilterLoading ? (
@@ -218,6 +231,12 @@ function CategoryContent({
                   <p className="text-sm text-muted-foreground">
                     Top performers by total regional score
                   </p>
+                  {!isComplete && weeksOfData < 52 && (
+                    <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground mt-2">
+                      <Info className="w-4 h-4" />
+                      Based on {weeksOfData} weeks of data. Rankings may shift as the year progresses.
+                    </p>
+                  )}
                 </div>
 
                 {showFilterLoading || regionalTop10sLoading ? (
@@ -243,6 +262,12 @@ function CategoryContent({
         <div className="text-center">
           <h2 className="text-2xl font-bold">{categoryInfo?.label}</h2>
           <p className="text-muted-foreground mt-1">{categoryInfo?.description}</p>
+          {!isComplete && weeksOfData < 52 && (
+            <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground mt-2">
+              <Info className="w-4 h-4" />
+              Based on {weeksOfData} weeks of data. Rankings may shift as the year progresses.
+            </p>
+          )}
         </div>
 
         {nationalLoading || showFilterLoading ? (
@@ -264,6 +289,12 @@ function CategoryContent({
         <div className="text-center">
           <h2 className="text-2xl font-bold">{categoryInfo?.label}</h2>
           <p className="text-muted-foreground mt-1">{categoryInfo?.description}</p>
+          {!isComplete && weeksOfData < 52 && (
+            <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground mt-2">
+              <Info className="w-4 h-4" />
+              Based on {weeksOfData} weeks of data. Rankings may shift as the year progresses.
+            </p>
+          )}
         </div>
 
         {efficientLoading || showFilterLoading ? (
@@ -283,7 +314,10 @@ export default function Awards() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const year = yearParam ? parseInt(yearParam) : 2025;
+  const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
+  const isComplete = year < new Date().getFullYear();
+  const { data: availableYears } = useAvailableYears();
+  const { data: yearStats } = useYearStats(year);
 
   // Parse category from URL slug (defaults to 'most_regional')
   const categoryFromUrl = categoryParam ? CATEGORY_SLUGS[categoryParam] : undefined;
@@ -446,14 +480,22 @@ export default function Awards() {
         </div>
       </header>
 
+      {/* Year Tabs */}
+      {availableYears && availableYears.length > 1 && (
+        <div className="container mx-auto px-4 pt-6 max-w-6xl">
+          <YearTabs availableYears={availableYears} currentYear={year} />
+        </div>
+      )}
+
       <div className="container mx-auto px-4 py-8 max-w-6xl space-y-8">
         {/* Hero Section */}
         <HeroSection
           year={year}
+          isComplete={isComplete}
           stats={{
             totalRegions: 9,
-            totalWeeks: 52,
-            totalBooks: 847,
+            totalWeeks: yearStats?.weeksOfData ?? 52,
+            totalBooks: yearStats?.totalBooks ?? 0,
           }}
         />
 
@@ -480,6 +522,8 @@ export default function Awards() {
             <CategoryContent
               category={activeCategory}
               year={year}
+              isComplete={isComplete}
+              weeksOfData={yearStats?.weeksOfData ?? 52}
               mostRegionalByRegion={mostRegionalByRegion}
               regionalTop10sByRegion={regionalTop10sByRegion}
               regionalTop10sLoading={regionalTop10sLoading}
