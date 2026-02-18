@@ -3,12 +3,26 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
 
-const mockFrom = vi.fn();
-
 vi.mock('@/integrations/supabase/client', () => {
+  const builder: any = {};
+  builder.select = vi.fn(() => builder);
+  builder.gte = vi.fn(() => builder);
+  builder.lt = vi.fn(() => builder);
+  builder.limit = vi.fn(() => Promise.resolve({
+    data: [
+      { week_date: '2026-01-07', isbn: '978-0-11-111111-1' },
+      { week_date: '2026-01-07', isbn: '978-0-22-222222-2' },
+      { week_date: '2026-01-14', isbn: '978-0-11-111111-1' },
+      { week_date: '2026-01-14', isbn: '978-0-33-333333-3' },
+      { week_date: '2026-01-21', isbn: '978-0-11-111111-1' },
+      { week_date: '2026-01-21', isbn: '978-0-22-222222-2' },
+      { week_date: '2026-01-21', isbn: '978-0-44-444444-4' },
+    ],
+    error: null,
+  }));
   return {
     supabase: {
-      from: (...args: any[]) => mockFrom(...args),
+      from: vi.fn(() => builder),
     },
   };
 });
@@ -25,41 +39,7 @@ const createWrapper = () => {
 };
 
 describe('useYearStats', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Mock weekly_scores query (week count)
-    const weekBuilder: any = {};
-    weekBuilder.select = vi.fn(() => weekBuilder);
-    weekBuilder.eq = vi.fn(() => weekBuilder);
-    weekBuilder.gte = vi.fn(() => weekBuilder);
-    weekBuilder.lt = vi.fn(() => Promise.resolve({
-      data: [
-        { week_date: '2026-01-07' },
-        { week_date: '2026-01-14' },
-        { week_date: '2026-01-21' },
-        { week_date: '2026-01-28' },
-        { week_date: '2026-02-04' },
-        { week_date: '2026-02-11' },
-        { week_date: '2026-02-18' },
-      ],
-      error: null,
-    }));
-
-    // Mock book_performance_metrics query (book count)
-    const bookBuilder: any = {};
-    bookBuilder.select = vi.fn(() => bookBuilder);
-    bookBuilder.eq = vi.fn(() => Promise.resolve({
-      data: Array.from({ length: 423 }, (_, i) => ({ isbn: `isbn-${i}` })),
-      error: null,
-    }));
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'weekly_scores') return weekBuilder;
-      if (table === 'book_performance_metrics') return bookBuilder;
-      return weekBuilder;
-    });
-  });
+  beforeEach(() => vi.clearAllMocks());
 
   it('should return week count and book count for a year', async () => {
     const { result } = renderHook(() => useYearStats(2026), {
@@ -67,6 +47,7 @@ describe('useYearStats', () => {
     });
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.data).toEqual({ weeksOfData: 7, totalBooks: 423 });
+    // 3 unique weeks, 4 unique ISBNs
+    expect(result.current.data).toEqual({ weeksOfData: 3, totalBooks: 4 });
   });
 });

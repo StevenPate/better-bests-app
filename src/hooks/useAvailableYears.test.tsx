@@ -6,7 +6,16 @@ import { ReactNode } from 'react';
 vi.mock('@/integrations/supabase/client', () => {
   const builder: any = {};
   builder.select = vi.fn(() => builder);
-  builder.order = vi.fn(() => Promise.resolve({ data: [{ year: 2025 }, { year: 2026 }], error: null }));
+  builder.order = vi.fn(() => builder);
+  builder.limit = vi.fn(() => Promise.resolve({
+    data: [
+      { week_date: '2025-01-08' },
+      { week_date: '2025-06-15' },
+      { week_date: '2026-01-07' },
+      { week_date: '2026-02-11' },
+    ],
+    error: null,
+  }));
   return {
     supabase: {
       from: vi.fn(() => builder),
@@ -28,7 +37,7 @@ const createWrapper = () => {
 describe('useAvailableYears', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('should return sorted array of available years', async () => {
+  it('should return sorted array of available years from weekly_scores', async () => {
     const { result } = renderHook(() => useAvailableYears(), {
       wrapper: createWrapper(),
     });
