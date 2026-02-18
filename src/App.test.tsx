@@ -8,15 +8,18 @@ import App from './App';
 // Mock Supabase client to prevent network calls
 vi.mock('@/integrations/supabase/client', () => {
   const createQueryBuilder = (payload: any = null) => {
+    const resolvedValue = { data: [], error: null, count: 0 };
     const builder: any = {
       select: vi.fn(() => builder),
       eq: vi.fn(() => builder),
       gte: vi.fn(() => builder),
-      lt: vi.fn(() => ({ data: [], error: null })),
+      lt: vi.fn(() => builder),
       in: vi.fn(() => builder),
-      order: vi.fn(() => ({ data: [], error: null })),
-      limit: vi.fn(() => ({ data: [], error: null })),
+      order: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
       single: vi.fn(() => Promise.resolve({ data: payload, error: null })),
+      // Make builder thenable so await resolves to empty result
+      then: (resolve: any, reject: any) => Promise.resolve(resolvedValue).then(resolve, reject),
     };
     return builder;
   };

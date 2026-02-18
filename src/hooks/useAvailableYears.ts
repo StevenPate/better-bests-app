@@ -4,24 +4,38 @@ import { logger } from '@/lib/logger';
 
 /** Fetch distinct years that have weekly scores data */
 async function fetchAvailableYears(): Promise<number[]> {
-  // Query weekly_scores (not book_performance_metrics) because weekly data
-  // exists immediately, while metrics are only populated by the nightly cron.
-  // We query one row per region per week (limit covers all possible combos)
-  // then extract distinct years client-side.
-  const { data, error } = await supabase
-    .from('weekly_scores')
-    .select('week_date')
-    .order('week_date', { ascending: true })
-    .limit(10000);
+  // Get the earliest and latest week_date to determine the year range.
+  // Only 2 rows are fetched regardless of table size.
+  const [firstResult, lastResult] = await Promise.all([
+    supabase
+      .from('weekly_scores')
+      .select('week_date')
+      .order('week_date', { ascending: true })
+      .limit(1),
+    supabase
+      .from('weekly_scores')
+      .select('week_date')
+      .order('week_date', { ascending: false })
+      .limit(1),
+  ]);
 
-  if (error) {
-    logger.error('useAvailableYears', 'Failed to fetch available years', error);
-    throw error;
+  if (firstResult.error) {
+    logger.error('useAvailableYears', 'Failed to fetch earliest week', firstResult.error);
+    throw firstResult.error;
+  }
+  if (lastResult.error) {
+    logger.error('useAvailableYears', 'Failed to fetch latest week', lastResult.error);
+    throw lastResult.error;
   }
 
-  const years = [...new Set(
-    data.map((row: { week_date: string }) => new Date(row.week_date).getFullYear())
-  )].sort((a, b) => a - b);
+  if (!firstResult.data?.length || !lastResult.data?.length) return [];
+
+  // Parse years from date strings (YYYY-MM-DD) to avoid timezone issues
+  const firstYear = parseInt(firstResult.data[0].week_date.substring(0, 4));
+  const lastYear = parseInt(lastResult.data[0].week_date.substring(0, 4));
+
+  const years: number[] = [];
+  for (let y = firstYear; y <= lastYear; y++) years.push(y);
   return years;
 }
 

@@ -3,22 +3,12 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode } from 'react';
 
+const mockFrom = vi.fn();
+
 vi.mock('@/integrations/supabase/client', () => {
-  const builder: any = {};
-  builder.select = vi.fn(() => builder);
-  builder.order = vi.fn(() => builder);
-  builder.limit = vi.fn(() => Promise.resolve({
-    data: [
-      { week_date: '2025-01-08' },
-      { week_date: '2025-06-15' },
-      { week_date: '2026-01-07' },
-      { week_date: '2026-02-11' },
-    ],
-    error: null,
-  }));
   return {
     supabase: {
-      from: vi.fn(() => builder),
+      from: (...args: any[]) => mockFrom(...args),
     },
   };
 });
@@ -35,9 +25,30 @@ const createWrapper = () => {
 };
 
 describe('useAvailableYears', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-  it('should return sorted array of available years from weekly_scores', async () => {
+    // Two queries: first ordered asc limit 1, second ordered desc limit 1
+    let callCount = 0;
+    mockFrom.mockImplementation(() => {
+      const builder: any = {};
+      builder.select = vi.fn(() => builder);
+      builder.order = vi.fn(() => {
+        callCount++;
+        const isAsc = callCount === 1;
+        return {
+          ...builder,
+          limit: vi.fn(() => Promise.resolve({
+            data: [{ week_date: isAsc ? '2025-01-08' : '2026-02-11' }],
+            error: null,
+          })),
+        };
+      });
+      return builder;
+    });
+  });
+
+  it('should return year range from earliest to latest week_date', async () => {
     const { result } = renderHook(() => useAvailableYears(), {
       wrapper: createWrapper(),
     });
