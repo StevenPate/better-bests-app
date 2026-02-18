@@ -11,7 +11,11 @@ vi.mock('@/integrations/supabase/client', () => {
     const builder: any = {
       select: vi.fn(() => builder),
       eq: vi.fn(() => builder),
+      gte: vi.fn(() => builder),
+      lt: vi.fn(() => ({ data: [], error: null })),
+      in: vi.fn(() => builder),
       order: vi.fn(() => ({ data: [], error: null })),
+      limit: vi.fn(() => ({ data: [], error: null })),
       single: vi.fn(() => Promise.resolve({ data: payload, error: null })),
     };
     return builder;
@@ -128,6 +132,13 @@ describe('App Routing', () => {
     // Wait for lazy-loaded BookDetail component and Layout to render
     const navElements = await screen.findAllByRole('navigation');
     expect(navElements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should redirect /review to current year review page', async () => {
+    renderApp('/review');
+    // The ReviewDefaultRedirect should redirect to /review/{currentYear}
+    // which renders the Awards page with Year in Review heading
+    expect(await screen.findByText(/year in review/i)).toBeInTheDocument();
   });
 
   it('should handle 404 for invalid routes', async () => {
