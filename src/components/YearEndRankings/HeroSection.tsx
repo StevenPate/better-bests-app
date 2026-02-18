@@ -2,6 +2,7 @@ import { Sparkles, MapPin, Calendar, BookOpen } from 'lucide-react';
 
 interface HeroSectionProps {
   year: number;
+  isComplete?: boolean;
   stats?: {
     totalBooks?: number;
     totalWeeks?: number;
@@ -9,7 +10,7 @@ interface HeroSectionProps {
   };
 }
 
-export function HeroSection({ year, stats }: HeroSectionProps) {
+export function HeroSection({ year, isComplete = true, stats }: HeroSectionProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/20">
       {/* Decorative elements */}
@@ -30,7 +31,7 @@ export function HeroSection({ year, stats }: HeroSectionProps) {
         {/* Year badge */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary font-medium text-sm mb-6">
           <Sparkles className="w-4 h-4" />
-          <span>{year}</span>
+          <span>{isComplete ? year : `${year} Year to Date`}</span>
           <Sparkles className="w-4 h-4" />
         </div>
 
@@ -58,7 +59,7 @@ export function HeroSection({ year, stats }: HeroSectionProps) {
               <Calendar className="w-5 h-5 text-primary" />
               <div className="text-left">
                 <div className="text-2xl font-bold">{stats.totalWeeks || 52}</div>
-                <div className="text-xs text-muted-foreground">Weeks</div>
+                <div className="text-xs text-muted-foreground">{isComplete ? 'Weeks' : 'Weeks So Far'}</div>
               </div>
             </div>
 
