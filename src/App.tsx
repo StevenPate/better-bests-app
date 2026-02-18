@@ -82,19 +82,13 @@ const LegacyAwardsRedirect = () => {
 /**
  * Review default year redirect component
  *
- * Redirects `/review` to `/review/2025` (current year)
+ * Redirects `/review` to `/review/{currentYear}` (dynamically detected)
  * to provide a clean default route for the year-end review.
  *
  * @returns Navigate element redirecting to current year review
- *
- * @example
- * ```tsx
- * // URL: /review
- * // Redirects to: /review/2025
- * ```
  */
 const ReviewDefaultRedirect = () => {
-  return <Navigate to="/review/2025" replace />;
+  return <Navigate to={`/review/${new Date().getFullYear()}`} replace />;
 };
 
 /**

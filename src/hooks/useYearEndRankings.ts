@@ -406,13 +406,13 @@ async function fetchRankings(
  * React Query hook for fetching year-end rankings
  *
  * @param category - Type of ranking to fetch
- * @param year - Year for rankings (defaults to 2025)
+ * @param year - Year for rankings (defaults to current year)
  * @param region - Region code (required for regional_top10s)
  * @returns Query result with rankings array
  */
 export function useYearEndRankings(
   category: RankingCategory,
-  year: number = 2025,
+  year: number = new Date().getFullYear(),
   region?: string
 ) {
   return useQuery({
