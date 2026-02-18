@@ -153,7 +153,7 @@ const BookDetail = () => {
 
   const fetchBookAudience = async (isbn: string): Promise<string> => {
     try {
-      const audience = await BestsellerParser.getBookAudience(isbn);
+      const audience = await BestsellerParser.getBookAudience(isbn, currentRegion.abbreviation);
       return audience || '';
     } catch (error) {
       logger.error('Error fetching book audience:', error);

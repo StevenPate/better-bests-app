@@ -35,7 +35,7 @@ const Index = () => {
     clearSwitchingData,
   } = useBestsellerData();
 
-  const { audiences: bookAudiences } = useBookAudiences(bestsellerData);
+  const { audiences: bookAudiences } = useBookAudiences(bestsellerData, currentRegion.abbreviation);
 
   const {
     filter,
@@ -134,7 +134,7 @@ const Index = () => {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               Better Bestsellers
             </h1>
-            <Link to="/review">
+            <Link to="/review/2025">
               <Badge variant="secondary" className="gap-1 hover:bg-secondary/80 transition-colors cursor-pointer">
                 <Sparkles className="w-3 h-3" />
                 2025 Year in Review

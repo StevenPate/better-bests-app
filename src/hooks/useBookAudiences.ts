@@ -57,7 +57,7 @@ function getISBNsIdentifier(data: BestsellerList | null): string {
  * @param bestsellerData - The bestseller list data
  * @returns Audience data, loading state, and error state
  */
-export function useBookAudiences(bestsellerData: BestsellerList | null): UseBookAudiencesReturn {
+export function useBookAudiences(bestsellerData: BestsellerList | null, region: string = 'PNBA'): UseBookAudiencesReturn {
   const {
     data: audienceData,
     isLoading,
@@ -65,6 +65,7 @@ export function useBookAudiences(bestsellerData: BestsellerList | null): UseBook
   } = useQuery({
     queryKey: [
       'book-audiences',
+      region,
       bestsellerData?.date,
       getISBNsIdentifier(bestsellerData),
     ],
@@ -96,7 +97,7 @@ export function useBookAudiences(bestsellerData: BestsellerList | null): UseBook
       // Batch fetch audiences from database
       let batchedAudiences: Record<string, string> = {};
       try {
-        batchedAudiences = await BestsellerParser.batchGetBookAudiences(isbns);
+        batchedAudiences = await BestsellerParser.batchGetBookAudiences(isbns, region);
         logger.debug('[useBookAudiences] Fetched', Object.keys(batchedAudiences).length, 'audiences from database');
       } catch (error) {
         logger.error('[useBookAudiences] Error fetching batched audiences:', error);

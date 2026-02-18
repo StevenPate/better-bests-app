@@ -185,7 +185,8 @@ describe('Index page audience batching', () => {
     // Note: The actual audience data propagation to BookListDisplay is tested
     // in integration tests and works correctly in production
     expect(parserMocks.batchGetBookAudiences).toHaveBeenCalledWith(
-      expect.arrayContaining(['9780000000001', '9780000000002', '9780000000003'])
+      expect.arrayContaining(['9780000000001', '9780000000002', '9780000000003']),
+      expect.any(String)
     );
   });
 });

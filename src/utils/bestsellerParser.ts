@@ -292,66 +292,68 @@ export class BestsellerParser {
     this.weeksCacheExpiry = 0;
   }
 
-  static async batchGetBookAudiences(isbns: string[]): Promise<Record<string, string>> {
+  static async batchGetBookAudiences(isbns: string[], region: string = 'PNBA'): Promise<Record<string, string>> {
     // Check if cache is still valid
     if (Date.now() < this.audienceCacheExpiry && this.audienceCache.size > 0) {
       const result: Record<string, string> = {};
       const uncachedIsbns = [];
-      
+
       for (const isbn of isbns) {
-        if (this.audienceCache.has(isbn)) {
-          result[isbn] = this.audienceCache.get(isbn)!;
+        const cacheKey = `${region}:${isbn}`;
+        if (this.audienceCache.has(cacheKey)) {
+          result[isbn] = this.audienceCache.get(cacheKey)!;
         } else {
           uncachedIsbns.push(isbn);
         }
       }
-      
+
       // If all data is cached, return immediately
       if (uncachedIsbns.length === 0) {
         return result;
       }
-      
+
       // Fetch only uncached data
       if (uncachedIsbns.length > 0) {
-        const newData = await this.fetchAudiencesFromDatabase(uncachedIsbns);
+        const newData = await this.fetchAudiencesFromDatabase(uncachedIsbns, region);
         Object.assign(result, newData);
-        
-        // Update cache
+
+        // Update cache with region-aware keys
         for (const [isbn, audience] of Object.entries(newData)) {
-          this.audienceCache.set(isbn, audience);
+          this.audienceCache.set(`${region}:${isbn}`, audience);
         }
       }
-      
+
       return result;
     }
 
     // Cache expired or empty, fetch all data
-    const result = await this.fetchAudiencesFromDatabase(isbns);
-    
-    // Update cache
+    const result = await this.fetchAudiencesFromDatabase(isbns, region);
+
+    // Update cache with region-aware keys
     this.audienceCache.clear();
     for (const [isbn, audience] of Object.entries(result)) {
-      this.audienceCache.set(isbn, audience);
+      this.audienceCache.set(`${region}:${isbn}`, audience);
     }
     this.audienceCacheExpiry = Date.now() + this.CACHE_DURATION;
-    
+
     return result;
   }
 
-  private static async fetchAudiencesFromDatabase(isbns: string[]): Promise<Record<string, string>> {
+  private static async fetchAudiencesFromDatabase(isbns: string[], region: string = 'PNBA'): Promise<Record<string, string>> {
     if (isbns.length === 0) return {};
 
-    logger.debug('BestsellerParser', 'fetchAudiencesFromDatabase called for', isbns.length, 'ISBNs');
+    logger.debug('BestsellerParser', 'fetchAudiencesFromDatabase called for', isbns.length, 'ISBNs in region', region);
     try {
       // Add timeout to prevent infinite hanging
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new FetchError(ErrorCode.DATA_FETCH_FAILED, { resource: 'book_audiences', operation: 'batch_query', reason: 'timeout' })), 10000) // 10 second timeout
       );
 
-      // Use 'in' filter for batch querying
+      // Use 'in' filter for batch querying, filtered by region
       const queryPromise = supabase
         .from('book_audiences')
         .select('isbn, audience')
+        .eq('region', region)
         .in('isbn', isbns);
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
@@ -374,8 +376,8 @@ export class BestsellerParser {
     }
   }
 
-  static async getBookAudience(isbn: string): Promise<string | null> {
-    const result = await this.batchGetBookAudiences([isbn]);
+  static async getBookAudience(isbn: string, region: string = 'PNBA'): Promise<string | null> {
+    const result = await this.batchGetBookAudiences([isbn], region);
     return result[isbn] || null;
   }
 

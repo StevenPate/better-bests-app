@@ -26,13 +26,13 @@ export interface UseAudiencesByIsbnReturn {
  * @param isbns - Array of ISBNs to look up
  * @returns Audience map, loading state, and error state
  */
-export function useAudiencesByIsbn(isbns: string[]): UseAudiencesByIsbnReturn {
+export function useAudiencesByIsbn(isbns: string[], region: string = 'PNBA'): UseAudiencesByIsbnReturn {
   const {
     data,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['audiences-by-isbn', isbns.sort().join(',')],
+    queryKey: ['audiences-by-isbn', region, isbns.sort().join(',')],
     queryFn: async () => {
       if (isbns.length === 0) {
         return new Map<string, AudienceType>();
@@ -41,7 +41,7 @@ export function useAudiencesByIsbn(isbns: string[]): UseAudiencesByIsbnReturn {
       logger.debug('[useAudiencesByIsbn] Fetching audiences for', isbns.length, 'ISBNs');
 
       try {
-        const audienceRecord = await BestsellerParser.batchGetBookAudiences(isbns);
+        const audienceRecord = await BestsellerParser.batchGetBookAudiences(isbns, region);
         const audienceMap = new Map<string, AudienceType>();
 
         for (const [isbn, audience] of Object.entries(audienceRecord)) {

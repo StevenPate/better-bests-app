@@ -20,7 +20,7 @@ export function FilterAndExportControls() {
   const { isPbnStaff } = useAuth();
   const { currentRegion } = useRegion();
   const { data: bestsellerData, isLoading, refresh } = useBestsellerData();
-  const { audiences: bookAudiences } = useBookAudiences(bestsellerData);
+  const { audiences: bookAudiences } = useBookAudiences(bestsellerData, currentRegion.abbreviation);
   const { toast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
