@@ -60,6 +60,9 @@ supabase/.env*
 .claude/
 .worktrees/
 
+# Trigger.dev
+.trigger
+
 # Temporary files
 *.tmp
 *.temp

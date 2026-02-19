@@ -8,7 +8,13 @@
     "type": "git",
     "url": "https://github.com/stevenpate/better-bestsellers-app.git"
   },
-  "keywords": ["books", "bestsellers", "bookselling", "retail", "analytics"],
+  "keywords": [
+    "books",
+    "bestsellers",
+    "bookselling",
+    "retail",
+    "analytics"
+  ],
   "private": false,
   "type": "module",
   "scripts": {
@@ -39,7 +45,9 @@
     "seed:staging": "tsx scripts/preflight-check.ts 'seed staging data' && tsx scripts/seed-staging-data.ts",
     "db:link": "supabase link",
     "db:reset": "tsx scripts/preflight-check.ts 'database reset' && supabase db reset && npm run seed:staging",
-    "db:push": "tsx scripts/preflight-check.ts 'migration push' --allow-production && supabase db push"
+    "db:push": "tsx scripts/preflight-check.ts 'migration push' --allow-production && supabase db push",
+    "dev:trigger": "npx trigger.dev@latest dev",
+    "deploy:trigger": "npx trigger.dev@latest deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -72,6 +80,7 @@
     "@radix-ui/react-tooltip": "^1.1.4",
     "@supabase/supabase-js": "^2.56.0",
     "@tanstack/react-query": "^5.56.2",
+    "@trigger.dev/sdk": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -101,6 +110,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@trigger.dev/build": "^4.3.3",
     "@types/node": "^22.5.5",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -119,6 +129,7 @@
     "postcss": "^8.4.47",
     "rollup-plugin-visualizer": "^6.0.5",
     "tailwindcss": "^3.4.11",
+    "trigger.dev": "^4.3.3",
     "tsx": "^4.20.6",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",

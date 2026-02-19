@@ -4,6 +4,7 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
   ],
+  "include": ["trigger.config.ts"],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
