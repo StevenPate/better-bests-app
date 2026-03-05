@@ -91,7 +91,7 @@ async function fetchWithRetry(
       return text;
     } catch (error) {
       lastError = error as Error;
-      console.warn(`Attempt ${attempt + 1} failed: ${error.message}`);
+      console.warn(`Attempt ${attempt + 1} failed: ${error instanceof Error ? error.message : String(error)}`);
 
       if (attempt < maxRetries - 1) {
         const delay = initialDelay * Math.pow(2, attempt);
@@ -623,11 +623,11 @@ async function runScrapingJob(supabase: any): Promise<JobRunRecord> {
       ...jobRecord,
       completed_at: new Date().toISOString(),
       status: 'failed',
-      error_message: error.message,
-      error_details: {
+      error_message: error instanceof Error ? error.message : String(error),
+      error_details: error instanceof Error ? {
         stack: error.stack,
         name: error.name,
-      },
+      } : {},
     };
 
     return jobRecord;
@@ -677,7 +677,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       }),
       {
         status: 500,
