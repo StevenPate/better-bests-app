@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { BestsellerParser } from './bestsellerParser';
+import { BestsellerParser } from './bestsellerFetcher';
+import { isCategoryHeader, formatCategoryName } from './bestsellerTextParser';
 import { BestsellerList, BestsellerCategory } from '@/types/bestseller';
 
 const supabaseClientMock = vi.hoisted(() => {
@@ -233,8 +234,7 @@ Author Name, Publisher, 9781234567890, $25.00
       ];
 
       validHeaders.forEach(header => {
-        const result = (BestsellerParser as unknown as { isCategoryHeader: (header: string) => boolean }).isCategoryHeader(header);
-        expect(result).toBe(true);
+        expect(isCategoryHeader(header)).toBe(true);
       });
     });
 
@@ -248,8 +248,7 @@ Author Name, Publisher, 9781234567890, $25.00
       ];
 
       invalidHeaders.forEach(header => {
-        const result = (BestsellerParser as unknown as { isCategoryHeader: (header: string) => boolean }).isCategoryHeader(header);
-        expect(result).toBe(false);
+        expect(isCategoryHeader(header)).toBe(false);
       });
     });
   });
@@ -657,13 +656,11 @@ Author Name, Publisher, 9781234567890, $25.00
 
   describe('formatCategoryName', () => {
     it('should format uppercase category names to title case', () => {
-      const formatted = (BestsellerParser as unknown as { formatCategoryName: (name: string) => string }).formatCategoryName('HARDCOVER FICTION');
-      expect(formatted).toBe('Hardcover Fiction');
+      expect(formatCategoryName('HARDCOVER FICTION')).toBe('Hardcover Fiction');
     });
 
     it('should handle mixed case input', () => {
-      const formatted = (BestsellerParser as unknown as { formatCategoryName: (name: string) => string }).formatCategoryName('young ADULT');
-      expect(formatted).toBe('Young Adult');
+      expect(formatCategoryName('young ADULT')).toBe('Young Adult');
     });
   });
 
