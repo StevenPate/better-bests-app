@@ -101,8 +101,9 @@ export async function fetchWithRetry<T>(
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
-    } catch (error: any) {
-      const isRateLimited = error?.status === 429 || error?.message?.includes('429');
+    } catch (error: unknown) {
+      const err = error as { status?: number; message?: string };
+      const isRateLimited = err?.status === 429 || err?.message?.includes('429');
       const isLastAttempt = i === retries - 1;
 
       if (isRateLimited && !isLastAttempt) {

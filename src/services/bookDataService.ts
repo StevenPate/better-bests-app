@@ -4,11 +4,11 @@ import { FetchError, ErrorCode, logError } from '@/lib/errors';
 import { BestsellerList } from '@/types/bestseller';
 
 // Audience data caching and batching
-let audienceCache: Map<string, string> = new Map();
+const audienceCache: Map<string, string> = new Map();
 let audienceCacheExpiry: number = 0;
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-let weeksOnListCache: Map<string, number> = new Map();
+const weeksOnListCache: Map<string, number> = new Map();
 let weeksCacheExpiry = 0;
 const WEEKS_CACHE_DURATION = 30 * 60 * 1000;
 

@@ -25,7 +25,7 @@ export class BestsellerParser {
   
   // Cache management — delegated to bestsellerCache module
   static getCachedData(cacheKey: string) { return getCachedData(cacheKey); }
-  static setCachedData(cacheKey: string, data: any) { return setCachedData(cacheKey, data); }
+  static setCachedData(cacheKey: string, data: unknown) { return setCachedData(cacheKey, data); }
   static isCurrentWeek(dateStr: string) { return isCurrentWeek(dateStr); }
   static isRecentCache(lastFetched: string, days: number) { return isRecentCache(lastFetched, days); }
 
@@ -255,7 +255,7 @@ export class BestsellerParser {
    * @param timeout Timeout in milliseconds (default 10000)
    * @returns The response data with .contents property
    */
-  private static async fetchWithCorsProxy(url: string, timeout: number = 10000): Promise<any> {
+  private static async fetchWithCorsProxy(url: string, timeout: number = 10000): Promise<Record<string, unknown>> {
     let lastError: Error | null = null;
 
     for (const proxy of this.CORS_PROXIES) {
@@ -361,7 +361,7 @@ export class BestsellerParser {
     logger.debug('[BestsellerParser]', refresh ? 'Refreshing data from bookweb.org' : 'Fetching new data from bookweb.org');
 
     try {
-      let currentWednesday = DateUtils.getMostRecentWednesday();
+      const currentWednesday = DateUtils.getMostRecentWednesday();
       let previousWednesday = new Date(currentWednesday);
 
       logger.debug('BestsellerParser', 'Attempting to fetch for Wednesday:', currentWednesday.toDateString());
@@ -540,7 +540,7 @@ export class BestsellerParser {
       }
 
       // Remove duplicates by creating a map keyed by week_date, keeping the first occurrence
-      const uniqueWeeks = new Map<string, any>();
+      const uniqueWeeks = new Map<string, Record<string, unknown>>();
       data?.forEach(record => {
         if (!uniqueWeeks.has(record.week_date)) {
           uniqueWeeks.set(record.week_date, record);

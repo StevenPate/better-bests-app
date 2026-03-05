@@ -3,7 +3,7 @@ import { DateUtils } from './dateUtils';
 import { logger } from '@/lib/logger';
 import { FetchError, ErrorCode, logError } from '@/lib/errors';
 
-export async function getCachedData(cacheKey: string): Promise<any | null> {
+export async function getCachedData(cacheKey: string): Promise<Record<string, unknown> | null> {
   logger.debug('BestsellerParser', 'getCachedData called for key:', cacheKey);
   try {
     logger.debug('BestsellerParser', 'Querying Supabase fetch_cache table...');
@@ -35,7 +35,7 @@ export async function getCachedData(cacheKey: string): Promise<any | null> {
   }
 }
 
-export async function setCachedData(cacheKey: string, data: any): Promise<void> {
+export async function setCachedData(cacheKey: string, data: unknown): Promise<void> {
   logger.debug('BestsellerParser', 'setCachedData called for key:', cacheKey);
   try {
     // Add timeout to prevent infinite hanging
@@ -76,7 +76,7 @@ export function isCurrentWeek(dateStr: string): boolean {
 
 export async function shouldFetchNewData(
   region: string = 'PNBA',
-  getCachedDataFn: (key: string) => Promise<any | null> = getCachedData
+  getCachedDataFn: (key: string) => Promise<Record<string, unknown> | null> = getCachedData
 ): Promise<boolean> {
   const cacheKey = `${region}_current_bestseller_list_v2`;
   const cachedData = await getCachedDataFn(cacheKey);
