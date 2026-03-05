@@ -727,6 +727,237 @@ for the week ended Sunday, January 10, 2024
     });
   });
 
+  describe('shouldFetchNewData', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should return true when no cached data exists', async () => {
+      vi.setSystemTime(new Date('2024-01-10T12:00:00Z')); // Wednesday UTC
+      vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValueOnce(null);
+
+      const result = await BestsellerParser.shouldFetchNewData('PNBA');
+      expect(result).toBe(true);
+    });
+
+    it('should return true when cache is stale (> 7 days)', async () => {
+      vi.setSystemTime(new Date('2024-01-18T12:00:00Z')); // Thursday UTC
+      const staleDate = new Date('2024-01-09T12:00:00Z'); // 9 days ago
+      vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValueOnce({
+        last_fetched: staleDate.toISOString(),
+        data: {},
+      });
+
+      const result = await BestsellerParser.shouldFetchNewData('PNBA');
+      expect(result).toBe(true);
+    });
+
+    it('should return false on non-Wednesday with fresh cache', async () => {
+      vi.setSystemTime(new Date('2024-01-11T12:00:00Z')); // Thursday UTC
+      const yesterday = new Date('2024-01-10T12:00:00Z');
+      vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValueOnce({
+        last_fetched: yesterday.toISOString(),
+        data: {},
+      });
+
+      const result = await BestsellerParser.shouldFetchNewData('PNBA');
+      expect(result).toBe(false);
+    });
+
+    it('should return true on Wednesday when cache is from a previous day', async () => {
+      vi.setSystemTime(new Date('2024-01-10T12:00:00Z')); // Wednesday UTC
+      const tuesday = new Date('2024-01-09T12:00:00Z');
+      vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValueOnce({
+        last_fetched: tuesday.toISOString(),
+        data: {},
+      });
+
+      const result = await BestsellerParser.shouldFetchNewData('PNBA');
+      expect(result).toBe(true);
+    });
+
+    it('should return false on Wednesday when already fetched today', async () => {
+      vi.setSystemTime(new Date('2024-01-10T14:00:00Z')); // Wednesday afternoon UTC
+      const wednesdayMorning = new Date('2024-01-10T08:00:00Z');
+      vi.spyOn(BestsellerParser, 'getCachedData').mockResolvedValueOnce({
+        last_fetched: wednesdayMorning.toISOString(),
+        data: {},
+      });
+
+      const result = await BestsellerParser.shouldFetchNewData('PNBA');
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('getCachedData error handling', () => {
+    it('should return null when Supabase returns an error', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            order: vi.fn(() => ({
+              limit: vi.fn(() => ({
+                maybeSingle: vi.fn(() => Promise.resolve({
+                  data: null,
+                  error: { message: 'connection failed' },
+                })),
+              })),
+            })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.getCachedData('test_key');
+      expect(result).toBeNull();
+    });
+
+    it('should return null when query times out', async () => {
+      vi.useFakeTimers();
+
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            order: vi.fn(() => ({
+              limit: vi.fn(() => ({
+                maybeSingle: vi.fn(() => new Promise(() => {})), // never resolves
+              })),
+            })),
+          })),
+        })),
+      });
+
+      const resultPromise = BestsellerParser.getCachedData('test_key');
+      await vi.advanceTimersByTimeAsync(11_000); // advance past the 10s internal timeout
+      const result = await resultPromise;
+      expect(result).toBeNull();
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('setCachedData error handling', () => {
+    it('should not throw when Supabase returns an error', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        upsert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(() => Promise.resolve({
+              data: null,
+              error: { message: 'write failed' },
+            })),
+          })),
+        })),
+      });
+
+      // Should resolve without throwing
+      await expect(
+        BestsellerParser.setCachedData('test_key', { some: 'data' })
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('batchGetBookAudiences', () => {
+    it('should fetch audiences from database for uncached ISBNs', async () => {
+      const mockAudiences = [
+        { isbn: '9781111111111', audience: 'A' },
+        { isbn: '9782222222222', audience: 'C' },
+      ];
+
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            in: vi.fn(() => Promise.resolve({ data: mockAudiences, error: null })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.batchGetBookAudiences(
+        ['9781111111111', '9782222222222'],
+        'PNBA'
+      );
+
+      expect(result['9781111111111']).toBe('A');
+      expect(result['9782222222222']).toBe('C');
+    });
+
+    it('should return cached results on second call', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            in: vi.fn(() => Promise.resolve({
+              data: [{ isbn: '9781111111111', audience: 'A' }],
+              error: null,
+            })),
+          })),
+        })),
+      });
+
+      await BestsellerParser.batchGetBookAudiences(['9781111111111'], 'PNBA');
+      vi.clearAllMocks();
+
+      // Second call should not query Supabase
+      const result = await BestsellerParser.batchGetBookAudiences(
+        ['9781111111111'],
+        'PNBA'
+      );
+
+      expect(result['9781111111111']).toBe('A');
+      expect(supabaseClientMock.from).not.toHaveBeenCalled();
+    });
+
+    it('should return empty object when database returns error', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            in: vi.fn(() => Promise.resolve({
+              data: null,
+              error: { message: 'query failed' },
+            })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.batchGetBookAudiences(
+        ['9781111111111'],
+        'PNBA'
+      );
+
+      expect(result).toEqual({});
+    });
+  });
+
+  describe('saveToDatabase', () => {
+    it('should not throw when edge function returns an error', async () => {
+      supabaseClientMock.functions.invoke.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'edge function failed' },
+      });
+
+      const mockList: BestsellerList = {
+        title: 'Test',
+        date: '2024-01-10',
+        categories: [{
+          name: 'Hardcover Fiction',
+          books: [{
+            rank: 1,
+            title: 'Test Book',
+            author: 'Author',
+            publisher: 'Publisher',
+            isbn: '9781111111111',
+            price: '$25.00',
+          }],
+        }],
+      };
+
+      // Should not throw
+      await expect(
+        BestsellerParser.saveToDatabase(mockList, new Date('2024-01-10'), 'PNBA')
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('BestsellerParser - Multi-Region Support', () => {
     const mockCachedResult = {
       data: {
