@@ -243,27 +243,7 @@ export class BestsellerParser {
 
       if (existingAudience) return; // Audience already assigned
 
-      // Determine default audience based on category
-      let defaultAudience = 'A'; // Default to Adult
-
-      const adultCategories = [
-        'Hardcover Fiction', 'Hardcover Nonfiction', 
-        'Trade Paperback Fiction', 'Trade Paperback Nonfiction', 
-        'Mass Market Paperback'
-      ];
-      
-      const childrenCategories = [
-        'Children\'s Illustrated', 'Early & Middle Grade Readers', 
-        'Children\'s Series Titles'
-      ];
-
-      if (adultCategories.includes(categoryName)) {
-        defaultAudience = 'A';
-      } else if (childrenCategories.includes(categoryName)) {
-        defaultAudience = 'C';
-      } else if (categoryName === 'Young Adult') {
-        defaultAudience = 'T';
-      }
+      const defaultAudience = this.getDefaultAudience(categoryName);
 
       // Insert default audience
       await supabase.from('book_audiences').insert({

@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from "../_shared/cors.ts";
+import { normalizeIsbn } from "../_shared/utils.ts";
 
 interface RegionalBook {
   isbn: string;
@@ -29,11 +26,6 @@ function getCurrentWeekUrls() {
     'NAIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723na.txt',
     'GLIBA': 'https://www.bookweb.org/sites/default/files/regional_bestseller/250723gl.txt'
   };
-}
-
-// Function to normalize ISBN (remove hyphens, spaces, etc.)
-function normalizeIsbn(isbn: string): string {
-  return isbn.replace(/[-\s]/g, '');
 }
 
 function parseRegionalList(content: string, region: string): RegionalBook[] {

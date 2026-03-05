@@ -12,6 +12,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.1';
+import { corsHeaders } from "../_shared/cors.ts";
+import { getMostRecentWednesday, formatAsYYMMDD } from "../_shared/utils.ts";
 
 // ============================================================================
 // Type Definitions
@@ -52,42 +54,6 @@ interface JobRunRecord {
   error_message?: string;
   error_details?: Record<string, any>;
   metadata?: Record<string, any>;
-}
-
-// ============================================================================
-// CORS Headers
-// ============================================================================
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Get the most recent Wednesday date
- */
-function getMostRecentWednesday(): Date {
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 3 = Wednesday
-  const daysToSubtract = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4;
-  const wednesday = new Date(now);
-  wednesday.setDate(now.getDate() - daysToSubtract);
-  wednesday.setHours(0, 0, 0, 0);
-  return wednesday;
-}
-
-/**
- * Format date as YYMMDD for bookweb.org URLs
- */
-function formatAsYYMMDD(date: Date): string {
-  const year = date.getFullYear().toString().slice(-2);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}${month}${day}`;
 }
 
 /**
