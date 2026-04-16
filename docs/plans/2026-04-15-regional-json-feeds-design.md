@@ -44,10 +44,72 @@ Phase 4 of the existing `populateRegionalBestsellers` Trigger.dev task:
 - **Paths:** `region/{ABBREVIATION}.json`, overwritten weekly.
 - **Public URL pattern:** `https://<project>.supabase.co/storage/v1/object/public/feeds/region/{REGION}.json`
 - **Netlify proxy:** `/region/:region.json` rewrites to the Supabase URL via
-  `_redirects` rule with status `200` (rewrite, not redirect).
+  `_redirects` rule with status `200` (rewrite, not redirect). See "Netlify
+  Proxy Trade-offs" below.
 - **CORS:** Supabase public buckets serve with permissive CORS by default.
-- **Cache:** Default `cache-control: max-age=3600` is sufficient for weekly
-  updates.
+- **Cache:** On upload, set `cacheControl: '604800'` (7 days) via the Supabase
+  upload options. Files don't change until the next Wednesday run, so a longer
+  TTL reduces CDN bandwidth without serving stale data. See "Cache Strategy"
+  below.
+
+### Cache Strategy
+
+Default Supabase Storage cache is `max-age=3600` (1 hour). Between Wednesday
+updates that's 168 cache windows serving identical bytes — wasteful.
+
+**Phase 1:** Upload with `cacheControl: '604800'` (7 days). Weekly updates
+overwrite the file; the new upload invalidates the prior cache entry at the
+CDN edge via Supabase's internal cache-busting on mutation. Clients fetching
+during the brief propagation window may see the prior week's data, which is
+acceptable.
+
+**Phase 2 additions:**
+
+1. ETag / Last-Modified support with conditional `304 Not Modified` responses.
+   Supabase Storage exposes ETags automatically; the main work is ensuring the
+   Netlify proxy doesn't strip them.
+2. Purge CDN on upload via Supabase's cache invalidation API if content
+   propagation becomes a problem.
+
+### Netlify Proxy Trade-offs
+
+We use a **200 rewrite** rather than a **307 redirect**. Trade-offs:
+
+| Concern | 200 Rewrite | 307 Redirect |
+|---|---|---|
+| Client sees origin | Hidden (Netlify) | Exposed (Supabase) |
+| Round trips | 1 | 2 |
+| Debuggability on 5xx | Harder (masked origin) | Easier (direct error) |
+| CORS headers | Supabase's | Supabase's |
+| Public API stability | High (URL permanent) | High (URL permanent) |
+
+**Decision:** 200 rewrite. The latency win matters for the SPA's internal
+use; third-party consumers get a single URL that doesn't change even if we
+later swap out the storage backend. The debuggability cost is mitigated by
+documenting the Supabase origin in the public API docs so consumers know
+where to look when investigating 5xx errors.
+
+**Supabase unavailable fallback:** None in Phase 1. If Supabase Storage is
+down, consumers get a 5xx response. Phase 2 could add a Netlify Edge Function
+that caches the last successful response in KV storage and serves it as a
+fallback.
+
+### Case Sensitivity
+
+Netlify path matching is case-sensitive. Our generated files are uppercase
+(`region/PNBA.json`) to match the `REGIONS` constant.
+
+**Phase 1 behavior:** `/region/PNBA.json` → file found.
+`/region/pnba.json` → 404.
+
+**Decision:** Document uppercase-only in the public API, matching REST
+conventions. Most public JSON feeds (GitHub, Reddit, etc.) treat paths as
+case-sensitive. Add both cases to the manual verification checklist to confirm
+the expected behavior.
+
+**Phase 2 option:** Add a second `_redirects` rule mapping lowercase region
+codes to the uppercase URL, or use a Netlify Edge Function to normalize case
+before fetching.
 
 ## JSON Schema (Phase 1)
 
@@ -212,8 +274,11 @@ chunk**. Typical regions fit in one chunk; the cap protects against Postgres
 1. Trigger the task from the Trigger.dev dashboard.
 2. Confirm 9 files exist in the `feeds` bucket.
 3. Fetch `/region/PNBA.json` through Netlify, validate JSON parses.
-4. Diff field shapes against the reference (string vs number types, blurb format).
-5. Load one cover image URL in a browser.
+4. Fetch `/region/pnba.json` (lowercase) — confirm 404 matches the documented
+   case-sensitive behavior.
+5. Inspect response headers for `cache-control: max-age=604800`.
+6. Diff field shapes against the reference (string vs number types, blurb format).
+7. Load one cover image URL in a browser.
 
 ## Phase 2 Improvements (Deferred)
 
