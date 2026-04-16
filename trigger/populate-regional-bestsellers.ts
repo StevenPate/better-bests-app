@@ -178,7 +178,7 @@ const BATCH_SIZE = 1000;
 
 export const populateRegionalBestsellers = schedules.task({
   id: "populate-regional-bestsellers",
-  cron: "15 17 * * 3", // Wednesdays 17:15 UTC
+  cron: { pattern: "*/20 8-10 * * 3", timezone: "America/Los_Angeles" },
   run: async () => {
     const supabase = createClient(
       process.env.SUPABASE_URL!,
@@ -188,17 +188,51 @@ export const populateRegionalBestsellers = schedules.task({
     const weekDate = getMostRecentWednesday();
     const weekDateISO = formatAsISO(weekDate);
 
+    // Early exit: check which regions already have data for this week
+    const regionChecks = await Promise.all(
+      REGIONS.map((r) =>
+        supabase
+          .from("regional_bestsellers")
+          .select("isbn", { count: "exact", head: true })
+          .eq("week_date", weekDateISO)
+          .eq("region", r.abbreviation)
+          .then((res) => ({
+            region: r.abbreviation,
+            hasData: !res.error && (res.count ?? 0) > 0,
+          }))
+      )
+    );
+
+    const populatedRegions = regionChecks.filter((r) => r.hasData);
+    if (populatedRegions.length >= REGIONS.length) {
+      logger.info("All regions already populated for this week, skipping", {
+        weekDate: weekDateISO,
+        regions: populatedRegions.map((r) => r.region),
+      });
+      return { success: true, skipped: true, weekDate: weekDateISO };
+    }
+
+    const missingRegions = regionChecks
+      .filter((r) => !r.hasData)
+      .map((r) => r.region);
+
     logger.info("Starting regional bestseller population", {
       weekDate: weekDateISO,
       regionCount: REGIONS.length,
+      alreadyPopulated: populatedRegions.length,
+      missingRegions,
     });
 
     // --- Phase 1: Fetch and upsert regional bestsellers ---
 
+    const regionsToFetch = REGIONS.filter((r) =>
+      missingRegions.includes(r.abbreviation)
+    );
+
     const allBooks: RegionalBook[] = [];
     const successfulRegions: string[] = [];
 
-    for (const region of REGIONS) {
+    for (const region of regionsToFetch) {
       try {
         const books = await fetchRegionalList(region, weekDate);
         if (books.length > 0) {
