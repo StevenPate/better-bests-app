@@ -92,4 +92,26 @@ describe("sanitizeDescription", () => {
     expect(sanitizeDescription("<p></p>")).toBe("");
     expect(sanitizeDescription("   ")).toBe("");
   });
+
+  it("decodes curly quote entities", () => {
+    expect(sanitizeDescription("it&rsquo;s")).toBe("it\u2019s");
+    expect(sanitizeDescription("&ldquo;quoted&rdquo;")).toBe("\u201cquoted\u201d");
+  });
+
+  it("decodes ellipsis entity", () => {
+    expect(sanitizeDescription("wait&hellip;")).toBe("wait\u2026");
+  });
+
+  it("decodes decimal numeric entities", () => {
+    expect(sanitizeDescription("em&#8212;dash")).toBe("em\u2014dash");
+    expect(sanitizeDescription("en&#8211;dash")).toBe("en\u2013dash");
+  });
+
+  it("decodes hex numeric entities", () => {
+    expect(sanitizeDescription("em&#x2014;dash")).toBe("em\u2014dash");
+  });
+
+  it("drops invalid numeric entities", () => {
+    expect(sanitizeDescription("bad&#0;x")).toBe("badx");
+  });
 });

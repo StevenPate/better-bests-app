@@ -28,6 +28,11 @@ const HTML_ENTITIES: Record<string, string> = {
   "&mdash;": "—",
   "&ndash;": "–",
   "&nbsp;": " ",
+  "&rsquo;": "\u2019",
+  "&lsquo;": "\u2018",
+  "&rdquo;": "\u201d",
+  "&ldquo;": "\u201c",
+  "&hellip;": "\u2026",
 };
 
 export function sanitizeDescription(raw: string): string {
@@ -40,6 +45,16 @@ export function sanitizeDescription(raw: string): string {
   for (const [entity, replacement] of Object.entries(HTML_ENTITIES)) {
     text = text.split(entity).join(replacement);
   }
+
+  // Decode numeric HTML entities (decimal and hex)
+  text = text.replace(/&#(\d+);/g, (_, n) => {
+    const code = parseInt(n, 10);
+    return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : "";
+  });
+  text = text.replace(/&#x([0-9a-fA-F]+);/g, (_, h) => {
+    const code = parseInt(h, 16);
+    return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : "";
+  });
 
   // 3. Collapse whitespace runs
   text = text.replace(/\s+/g, " ");
