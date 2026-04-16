@@ -1,17 +1,22 @@
 import { schedules, logger } from "@trigger.dev/sdk";
 import { createClient } from "@supabase/supabase-js";
+import {
+  assembleFeedJson,
+  type CurrentBook,
+  type PreviousWeekBook,
+} from "./feedGenerator";
 
 // Region configuration (sync with src/config/regions.ts)
 const REGIONS = [
-  { abbreviation: "PNBA", file_code: "pn" },
-  { abbreviation: "CALIBAN", file_code: "nc" },
-  { abbreviation: "CALIBAS", file_code: "sc" },
-  { abbreviation: "GLIBA", file_code: "gl" },
-  { abbreviation: "MPIBA", file_code: "mp" },
-  { abbreviation: "MIBA", file_code: "mw" },
-  { abbreviation: "NAIBA", file_code: "na" },
-  { abbreviation: "NEIBA", file_code: "ne" },
-  { abbreviation: "SIBA", file_code: "si" },
+  { abbreviation: "PNBA", file_code: "pn", full_name: "Pacific Northwest Booksellers Association" },
+  { abbreviation: "CALIBAN", file_code: "nc", full_name: "California Independent Booksellers Alliance (North)" },
+  { abbreviation: "CALIBAS", file_code: "sc", full_name: "California Independent Booksellers Alliance (South)" },
+  { abbreviation: "GLIBA", file_code: "gl", full_name: "Great Lakes Independent Booksellers Association" },
+  { abbreviation: "MPIBA", file_code: "mp", full_name: "Mountains & Plains Independent Booksellers Association" },
+  { abbreviation: "MIBA", file_code: "mw", full_name: "Midwest Independent Booksellers Association" },
+  { abbreviation: "NAIBA", file_code: "na", full_name: "New Atlantic Independent Booksellers Association" },
+  { abbreviation: "NEIBA", file_code: "ne", full_name: "New England Independent Booksellers Association" },
+  { abbreviation: "SIBA", file_code: "si", full_name: "Southern Independent Booksellers Alliance" },
 ];
 
 interface RegionalBook {
@@ -379,6 +384,152 @@ export const populateRegionalBestsellers = schedules.task({
       logger.info(`Cleaned up data older than ${cutoffDateISO}`);
     }
 
+    // --- Phase 4: Generate regional JSON feeds ---
+
+    const feedGeneration: {
+      succeeded: string[];
+      skipped: Array<{ region: string; reason: string }>;
+      failed: Array<{
+        region: string;
+        outcome: "transient_error" | "permanent_error";
+        error: string;
+        retriable: boolean;
+      }>;
+    } = { succeeded: [], skipped: [], failed: [] };
+
+    // Previous week (for "last" rank computation)
+    const previousWeekDate = new Date(weekDate);
+    previousWeekDate.setUTCDate(previousWeekDate.getUTCDate() - 7);
+    const previousWeekDateISO = formatAsISO(previousWeekDate);
+
+    for (const regionCode of successfulRegions) {
+      const region = REGIONS.find((r) => r.abbreviation === regionCode);
+      if (!region) {
+        feedGeneration.skipped.push({
+          region: regionCode,
+          reason: "region_not_in_constant",
+        });
+        continue;
+      }
+
+      try {
+        // Fetch current week's books for this region
+        const { data: currentRows, error: currentErr } = await supabase
+          .from("regional_bestsellers")
+          .select("isbn, title, author, publisher, rank, category")
+          .eq("week_date", weekDateISO)
+          .eq("region", regionCode)
+          .order("rank", { ascending: true });
+
+        if (currentErr) throw new Error(`current week query: ${currentErr.message}`);
+        if (!currentRows || currentRows.length === 0) {
+          feedGeneration.skipped.push({
+            region: regionCode,
+            reason: "no_books_current_week",
+          });
+          continue;
+        }
+
+        const currentBooks: CurrentBook[] = currentRows;
+        const isbns = currentBooks.map((b) => b.isbn);
+
+        // Fetch previous week's rows for "last" computation
+        const { data: previousRows, error: previousErr } = await supabase
+          .from("regional_bestsellers")
+          .select("isbn, rank")
+          .eq("week_date", previousWeekDateISO)
+          .eq("region", regionCode);
+
+        if (previousErr) throw new Error(`previous week query: ${previousErr.message}`);
+        const previousBooks: PreviousWeekBook[] = previousRows ?? [];
+
+        // Fetch weeks-on-list via RPC
+        const { data: wolRows, error: wolErr } = await supabase.rpc(
+          "get_weeks_on_list_batch_regional",
+          { isbn_list: isbns, target_region: regionCode }
+        );
+
+        if (wolErr) throw new Error(`weeks-on-list RPC: ${wolErr.message}`);
+        const weeksOnList: Record<string, number> = {};
+        for (const row of (wolRows ?? []) as Array<{ isbn: string; weeks_on_list: number }>) {
+          weeksOnList[row.isbn] = row.weeks_on_list;
+        }
+
+        // Fetch descriptions from fetch_cache (batched, single query per region)
+        const cacheKeys = isbns.map((isbn) => `google_books_info_${isbn}`);
+        const { data: cacheRows, error: cacheErr } = await supabase
+          .from("fetch_cache")
+          .select("cache_key, data")
+          .in("cache_key", cacheKeys);
+
+        if (cacheErr) throw new Error(`fetch_cache query: ${cacheErr.message}`);
+        const descriptions: Record<string, string> = {};
+        for (const row of (cacheRows ?? []) as Array<{ cache_key: string; data: { description?: string } | null }>) {
+          const isbn = row.cache_key.replace("google_books_info_", "");
+          const desc = row.data?.description;
+          if (typeof desc === "string") {
+            descriptions[isbn] = desc;
+          }
+        }
+
+        // Assemble and upload
+        const feed = assembleFeedJson({
+          region: { abbreviation: region.abbreviation, full_name: region.full_name },
+          weekDate,
+          currentBooks,
+          previousBooks,
+          weeksOnList,
+          descriptions,
+        });
+
+        const json = JSON.stringify(feed);
+        const buffer = new TextEncoder().encode(json);
+
+        const { error: uploadErr } = await supabase.storage
+          .from("feeds")
+          .upload(`region/${regionCode}.json`, buffer, {
+            upsert: true,
+            contentType: "application/json",
+            cacheControl: "604800",
+          });
+
+        if (uploadErr) throw new Error(`upload: ${uploadErr.message}`);
+
+        logger.info(`Feed generated for ${regionCode}`, {
+          bytes: buffer.byteLength,
+          sections: feed.sections.length,
+          entries: feed.sections.reduce((n, s) => n + s.entries.length, 0),
+        });
+        feedGeneration.succeeded.push(regionCode);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`Regional feed generation failed`, {
+          region: regionCode,
+          outcome: "transient_error",
+          error: message,
+          retriable: true,
+          weekDate: weekDateISO,
+        });
+        feedGeneration.failed.push({
+          region: regionCode,
+          outcome: "transient_error",
+          error: message,
+          retriable: true,
+        });
+      }
+    }
+
+    // If all regions failed, throw so Trigger.dev retries the task
+    if (
+      feedGeneration.succeeded.length === 0 &&
+      feedGeneration.failed.length === successfulRegions.length &&
+      successfulRegions.length > 0
+    ) {
+      throw new Error(
+        `All ${successfulRegions.length} regions failed feed generation`
+      );
+    }
+
     const result = {
       success: true,
       weekDate: weekDateISO,
@@ -387,6 +538,7 @@ export const populateRegionalBestsellers = schedules.task({
       insertedCount,
       errorCount,
       totalScoresCalculated: totalScores,
+      feedGeneration,
     };
 
     logger.info("Regional bestseller population complete", result);
