@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildBookSenseImageUrls } from "./feedGenerator";
 import { sanitizeDescription } from "./feedGenerator";
 import { composeBlurb } from "./feedGenerator";
+import { computeLastRank } from "./feedGenerator";
 
 describe("buildBookSenseImageUrls", () => {
   it("builds correct small and large URLs for a 13-digit ISBN", () => {
@@ -136,5 +137,31 @@ describe("composeBlurb", () => {
   it("does not sanitize (caller's responsibility)", () => {
     const result = composeBlurb("has <p>tags</p>", "NEW", "1");
     expect(result).toContain("<p>tags</p>");
+  });
+});
+
+describe("computeLastRank", () => {
+  it("returns previous rank as string when ISBN found on previous week", () => {
+    const previous = [
+      { isbn: "9780000000001", rank: 3 },
+      { isbn: "9780000000002", rank: 5 },
+    ];
+    expect(computeLastRank("9780000000001", previous)).toBe("3");
+  });
+
+  it("returns NEW when ISBN not on previous week", () => {
+    const previous = [{ isbn: "9780000000001", rank: 3 }];
+    expect(computeLastRank("9780000000999", previous)).toBe("NEW");
+  });
+
+  it("returns NEW when previous week is empty", () => {
+    expect(computeLastRank("9780000000001", [])).toBe("NEW");
+  });
+
+  it("matches by ISBN only, ignoring other fields", () => {
+    const previous = [
+      { isbn: "9780000000001", rank: 3, category: "FICTION" },
+    ];
+    expect(computeLastRank("9780000000001", previous)).toBe("3");
   });
 });

@@ -83,3 +83,16 @@ export function composeBlurb(
 ): string {
   return `${description}\nRank last week: ${last}\nWeeks on list: ${weeksOnList}`;
 }
+
+export interface PreviousWeekBook {
+  isbn: string;
+  rank: number;
+}
+
+export function computeLastRank(
+  isbn: string,
+  previous: PreviousWeekBook[]
+): string {
+  const match = previous.find((b) => b.isbn === isbn);
+  return match ? String(match.rank) : "NEW";
+}
