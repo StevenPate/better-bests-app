@@ -105,13 +105,58 @@ Exact match to reference `bestsellers.json`:
 
 ### BookSense image URL construction
 
-Given ISBN-13 `9780593804216`:
-- Last 3 digits: `216`
-- Middle 3 digits (positions 7-9 from the end): `804`
+**Source of the pattern:** Reverse-engineered from the reference
+`bestsellers.json`. BookSense has no public API documentation for their image
+CDN. The pattern was verified against multiple sample ISBNs from the reference
+feed:
 
-URLs:
+| ISBN | last3 | mid3 | small URL | large URL |
+|---|---|---|---|---|
+| 9780593804216 | 216 | 804 | .../books/216/804/FC9780593804216.JPG | .../216/804/9780593804216.jpg |
+| 9781682816752 | 752 | 816 | .../books/752/816/FC9781682816752.JPG | .../752/816/9781682816752.jpg |
+| 9781984881991 | 991 | 881 | .../books/991/881/FC9781984881991.JPG | .../991/881/9781984881991.jpg |
+
+**Risk:** If BookSense changes their URL scheme, all generated URLs break
+simultaneously. Mitigation documented in "Image URL Failure Handling" below.
+
+**Extraction rule:**
+
+- `last3` = last 3 digits of the ISBN-13
+- `mid3` = digits 7–9 counting from the left (or digits 4–6 from the right)
+
+**URL templates:**
+
 - `small_image_uri`: `https://images.booksense.com/images/books/{last3}/{mid3}/FC{isbn}.JPG`
 - `large_image_uri`: `https://images.booksense.com/images/{last3}/{mid3}/{isbn}.jpg`
+
+**Validation contract for `buildBookSenseImageUrls(isbn)`:**
+
+- Throw `Error` if `isbn` is not exactly 13 characters after stripping any
+  hyphens/whitespace.
+- Throw `Error` if `isbn` contains any non-digit characters after normalization.
+- The function is pure — no network calls, no side effects.
+- Callers in the task phase catch thrown errors per book and omit the entry
+  from the feed rather than aborting the whole region.
+
+### Image URL Failure Handling
+
+At generation time we do **not** HEAD-check each URL. Per region this would be
+~200 HTTP requests (small + large per book), and most would be redundant with
+prior runs.
+
+**Runtime detection (Phase 1):** Accept that generated URLs are deterministic
+from the reverse-engineered pattern. If BookSense's scheme changes, all feeds
+break together and we'll notice from monitoring or user reports.
+
+**Phase 2 additions:**
+
+1. A nightly audit job HEAD-checks a random sample of 50 generated URLs per
+   week and alerts if >10% 404.
+2. Track known-missing ISBNs in a new `booksense_image_blacklist` table. At
+   generation time, books in the blacklist get empty `small_image_uri` /
+   `large_image_uri` strings rather than broken URLs.
+3. A client-side `onError` handler on the SPA reports 404s back to the API,
+   which populates the blacklist.
 
 ## Implementation Components
 
@@ -181,6 +226,9 @@ Documented now, not built in Phase 1:
    `all.json` combining every region.
 5. **Improved descriptions** — investigate ABA/IndieBound data feeds.
 6. **Conditional requests** — custom ETag / cache headers for efficient polling.
+7. **Image URL auditing** — nightly HEAD-check sample + blacklist table + SPA
+   `onError` reporting loop to replace 404ing BookSense URLs with empty
+   strings. See "Image URL Failure Handling" above.
 
 Phase 2 changes are additive. The Phase 1 schema remains stable at the same URLs
 for backwards compatibility. New fields can be added as a superset, or a
