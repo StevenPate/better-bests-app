@@ -258,13 +258,95 @@ chunk**. Typical regions fit in one chunk; the cap protects against Postgres
 
 **Total per task run (9 regions):** ~36 queries + 9 Storage uploads.
 
-## Error Handling
+## Error Handling and Task Result Contract
 
-- Per-region failures logged but do not abort the task. Other regions continue.
-- Upload failures leave the previous week's file in place. Consumers always
-  get a valid (if stale) response.
-- Task return value includes `jsonFeedsGenerated: string[]` listing successful
-  regions.
+### Per-region outcome taxonomy
+
+Each region in Phase 4 ends in exactly one of these states:
+
+| Outcome | Meaning | Retriable? |
+|---|---|---|
+| `success` | Feed generated and uploaded | N/A |
+| `skipped` | Region wasn't in `successfulRegions` from Phase 1 (ingestion failed upstream) | No — upstream fix needed |
+| `no_books` | Region has no books for the current week in `regional_bestsellers` | No — data issue |
+| `transient_error` | Network timeout, Storage 5xx, RPC timeout | Yes — safe to re-run just Phase 4 |
+| `permanent_error` | Validation failure, schema mismatch, malformed data | No — needs code fix |
+
+### Task return value
+
+Phase 4 adds a `feedGeneration` key to the existing task result:
+
+```ts
+{
+  success: true,              // Task-level, existing field
+  weekDate: "2026-04-15",
+  regionsProcessed: [...],    // Existing
+  insertedCount: 900,         // Existing
+  totalScoresCalculated: 900, // Existing
+  feedGeneration: {
+    succeeded: ["PNBA", "CALIBAN", "GLIBA", ...],
+    skipped: [
+      { region: "MIBA", reason: "upstream_ingestion_failed" }
+    ],
+    failed: [
+      {
+        region: "CALIBAS",
+        outcome: "transient_error",
+        error: "Storage upload failed: 503",
+        retriable: true
+      }
+    ]
+  }
+}
+```
+
+### Task-level success policy
+
+- **All regions `success` or `skipped`:** task returns success.
+- **Any region in `failed`:** task still returns success at the Trigger.dev
+  level, but each failure is logged via `logger.error` with structured
+  metadata. The ingestion and scoring work from Phases 1–3 is already
+  committed to the DB and should not be re-run.
+- **All regions failed:** throw at end of task so Trigger.dev's retry logic
+  engages. This indicates a systemic failure (e.g., Storage bucket missing,
+  bad credentials) that a retry might clear.
+
+### Alerting strategy
+
+Trigger.dev captures `logger.error` calls in task runs. For each failed
+region:
+
+```ts
+logger.error("Regional feed generation failed", {
+  region: "CALIBAS",
+  outcome: "transient_error",
+  error: errorMessage,
+  retriable: true,
+  weekDate: weekDateISO,
+});
+```
+
+Operators monitoring the Trigger.dev dashboard see failures per run. For
+production alerting, a downstream webhook on task completion can parse
+`feedGeneration.failed` and notify (Slack, PagerDuty) — but wiring that up is
+out of scope for Phase 1.
+
+### Retry approach
+
+Phase 1 does not auto-retry failed regions mid-task. If a transient failure
+occurs:
+
+1. Feed generation code continues to the next region.
+2. The previous week's file remains in Storage — consumers get stale but
+   valid data.
+3. An operator can manually re-trigger the task, which skips already-ingested
+   regions (via the existing early-exit check) but will regenerate feeds for
+   all `successfulRegions`.
+
+**Phase 2 option:** Split Phase 4 into a separate `generate-regional-feeds`
+task that triggers after ingestion completes. Individual regions become
+subtasks that can retry independently via `triggerAndWait` with per-region
+retry config.
 
 ## Testing
 
