@@ -128,6 +128,29 @@ Task phase (integration):
   3 cleanup. Iterates `successfulRegions`, calls the pure functions, uploads
   each result.
 
+## Query Cardinality and Batching
+
+Each region has roughly 100 books (8–10 categories × 10–15 books). The
+implementation must avoid per-book queries.
+
+**Per region — four batched queries total:**
+
+1. Current week books: reused from Phase 2's scoring query. No new query.
+2. Previous week books: one `select` on `regional_bestsellers` filtered by
+   `week_date = previousWednesday` and `region`.
+3. Weeks on list: one `get_weeks_on_list_batch_regional` RPC call. The RPC is
+   server-side batched — `WHERE rb.isbn = ANY(isbn_list)` with `GROUP BY`, no
+   client-side filtering.
+4. Descriptions: one `fetch_cache` query using `.in('cache_key', keys)`. Missing
+   ISBNs simply don't appear in results; their `description` becomes empty
+   string. No wasted work pre-filtering.
+
+**Batch size cap:** `fetch_cache` and RPC queries are chunked at **100 ISBNs per
+chunk**. Typical regions fit in one chunk; the cap protects against Postgres
+`IN`-clause bloat if a region's list ever grows.
+
+**Total per task run (9 regions):** ~36 queries + 9 Storage uploads.
+
 ## Error Handling
 
 - Per-region failures logged but do not abort the task. Other regions continue.
