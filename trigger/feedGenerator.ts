@@ -96,3 +96,134 @@ export function computeLastRank(
   const match = previous.find((b) => b.isbn === isbn);
   return match ? String(match.rank) : "NEW";
 }
+
+export interface CurrentBook {
+  isbn: string;
+  title: string;
+  author: string;
+  publisher: string | null;
+  rank: number;
+  category: string | null;
+}
+
+export interface AssembleArgs {
+  region: { abbreviation: string; full_name: string };
+  weekDate: Date;
+  currentBooks: CurrentBook[];
+  previousBooks: PreviousWeekBook[];
+  weeksOnList: Record<string, number>;
+  descriptions: Record<string, string>;
+}
+
+export interface FeedEntry {
+  isbn: string;
+  title: string;
+  author: string;
+  publisher: string;
+  description: string;
+  blurb: string;
+  small_image_uri: string;
+  large_image_uri: string;
+  rank: string;
+  last: string;
+  weeks_on_list: string;
+}
+
+export interface FeedSection {
+  title: string;
+  entries: FeedEntry[];
+}
+
+export interface Feed {
+  title: string;
+  description: string;
+  for_date: string;
+  end_date: string;
+  sections: FeedSection[];
+}
+
+const LONG_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+};
+
+function formatLongDate(d: Date): string {
+  const base = d.toLocaleDateString("en-US", LONG_DATE_OPTIONS);
+  // "April 15, 2026" → "April 15th, 2026"
+  return base.replace(/(\d+),/, (_, n) => `${ordinalSuffix(parseInt(n, 10))},`);
+}
+
+function ordinalSuffix(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatISO(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+function subtractDays(d: Date, days: number): Date {
+  const copy = new Date(d);
+  copy.setUTCDate(copy.getUTCDate() - days);
+  return copy;
+}
+
+export function assembleFeedJson(args: AssembleArgs): Feed {
+  const forDate = formatISO(args.weekDate);
+  const endDate = formatISO(subtractDays(args.weekDate, 3)); // Wed → Sun
+
+  const sectionMap = new Map<string, FeedEntry[]>();
+
+  for (const book of args.currentBooks) {
+    let urls: { small: string; large: string };
+    try {
+      urls = buildBookSenseImageUrls(book.isbn);
+    } catch {
+      continue; // Skip entries with invalid ISBNs
+    }
+
+    const rawDescription = args.descriptions[book.isbn] ?? "";
+    const description = sanitizeDescription(rawDescription);
+    const last = computeLastRank(book.isbn, args.previousBooks);
+    const weeks = String(args.weeksOnList[book.isbn] ?? 0);
+
+    const entry: FeedEntry = {
+      isbn: book.isbn,
+      title: book.title,
+      author: book.author,
+      publisher: book.publisher ?? "",
+      description,
+      blurb: composeBlurb(description, last, weeks),
+      small_image_uri: urls.small,
+      large_image_uri: urls.large,
+      rank: String(book.rank),
+      last,
+      weeks_on_list: weeks,
+    };
+
+    const sectionTitle = book.category ?? "UNCATEGORIZED";
+    const bucket = sectionMap.get(sectionTitle) ?? [];
+    bucket.push(entry);
+    sectionMap.set(sectionTitle, bucket);
+  }
+
+  const sections: FeedSection[] = Array.from(sectionMap.entries()).map(
+    ([title, entries]) => ({
+      title,
+      entries: entries.sort(
+        (a, b) => parseInt(a.rank, 10) - parseInt(b.rank, 10)
+      ),
+    })
+  );
+
+  return {
+    title: `${args.region.abbreviation} Indie Bestsellers for ${formatLongDate(args.weekDate)}`,
+    description: `For the week ending ${formatLongDate(subtractDays(args.weekDate, 3))}, based on sales in independent bookstores from the ${args.region.full_name}.`,
+    for_date: forDate,
+    end_date: endDate,
+    sections,
+  };
+}
