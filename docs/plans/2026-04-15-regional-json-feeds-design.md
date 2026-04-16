@@ -235,6 +235,116 @@ Task phase (integration):
   3 cleanup. Iterates `successfulRegions`, calls the pure functions, uploads
   each result.
 
+## Last-Rank Matching
+
+### Data constraint
+
+The `regional_bestsellers` table has a `UNIQUE(region, isbn, week_date)`
+constraint (see `20251105000000_create_regional_bestsellers.sql`). This
+guarantees **at most one row per ISBN per region per week**. No deduplication
+step is needed in Phase 4 code.
+
+### Matching rule
+
+For each book on the current week's list:
+
+1. Look up the same `isbn` in the region's previous-week query result.
+2. If found, `last = String(previousRow.rank)`.
+3. If not found, `last = "NEW"`.
+
+Matching is **by ISBN only, ignoring category**. A book that was in
+`HARDCOVER FICTION` last week and `PAPERBACK FICTION` this week (category
+moves are rare but possible) uses its prior rank, not `"NEW"`. This matches
+how the reference feed appears to behave.
+
+### Test case (added to fixtures)
+
+```ts
+it('uses ISBN-only match, ignoring category', () => {
+  const previous = [
+    { isbn: '9780000000001', category: 'HARDCOVER FICTION', rank: 3 }
+  ];
+  const current = { isbn: '9780000000001', category: 'PAPERBACK FICTION', rank: 2 };
+
+  expect(computeLastRank(current.isbn, previous)).toBe('3');
+});
+
+it('returns NEW when ISBN absent from previous week', () => {
+  const previous = [
+    { isbn: '9780000000001', category: 'FICTION', rank: 3 }
+  ];
+  expect(computeLastRank('9780000000002', previous)).toBe('NEW');
+});
+```
+
+### Phase 2 option
+
+If stakeholders want `last` scoped per-category (so a book's appearance in a
+new category shows as `NEW`), Phase 2 could change the matching rule to
+`(isbn, category)` instead of `isbn`. This is a schema-compatible change that
+doesn't affect the feed structure.
+
+## Phase 4 Timing and Retry Behavior
+
+### Is Phase 4 part of the same task?
+
+**Yes.** Phase 4 runs inside the existing `populateRegionalBestsellers`
+Trigger.dev task, after Phase 3 cleanup. No separate trigger.
+
+### Time budget estimate
+
+Per task run (9 regions):
+
+- 9 previous-week queries (one per region, indexed lookup): ~100ms each → 1s
+- 9 RPC calls (`get_weeks_on_list_batch_regional`): ~200ms each → ~2s
+- 9 `fetch_cache` batched queries (one per region, `.in()` on cache_key): ~300ms each → ~3s
+- Pure-function JSON assembly: <100ms total
+- 9 Storage uploads (50–200 KB each): ~500ms each → ~5s
+
+**Estimated total Phase 4 duration: ~15 seconds** under normal conditions.
+Worst-case with network retries on Storage: ~60 seconds.
+
+### maxDuration adequacy
+
+Current `trigger.config.ts` has `maxDuration: 3600` (1 hour). Phase 4 adds
+~60 seconds worst-case on top of existing Phases 1–3 (which already complete
+comfortably within the limit). **No config change needed.**
+
+### Failure modes for Phase 4
+
+| Failure mode | Behavior | Consumer impact |
+|---|---|---|
+| Single region query/upload fails | Logged, other regions continue. Previous week's file stays in Storage. | Consumer of that region gets stale (last week's) data. |
+| All regions fail (e.g., bucket missing) | Task throws at end → Trigger.dev retries whole task. | All consumers get stale data until retry succeeds. |
+| Phase 4 times out mid-run | Trigger.dev marks task failed, retries task. Phases 1–3 early-exit on retry (ingestion check skips re-processing). | Some regions have fresh feeds, others stale, until retry completes Phase 4. |
+
+### Retry semantics
+
+Because the task retries as a unit, Phase 4 retries automatically when the
+whole task retries. The existing early-exit check (added in commit
+`6e57703`) means Phases 1–3 are near-no-ops on retry: they detect that
+ingestion already populated `regional_bestsellers` for the current week and
+skip directly to logging. Phase 4 then runs freshly.
+
+**Consequence:** A transient Phase 4 failure that triggers a task retry
+costs only Phase 4's ~15 seconds on the retry, not the full ingestion
+pipeline.
+
+### Explicit non-goal: per-region retry
+
+Phase 1 does not implement per-region retry within a single task run. If
+region CALIBAS fails in the first pass, it is not re-attempted before the
+task completes. Operators rely on:
+
+1. The previous week's file remaining valid in Storage (no user-visible
+   outage).
+2. Manual task re-trigger via the Trigger.dev dashboard if needed.
+3. The next weekly run naturally overwriting the stale file.
+
+Phase 2 splits feed generation into a separate task with per-region subtasks
+(`triggerAndWait` on each region) so individual regions can retry
+independently with distinct retry configs.
+
 ## Description Sanitization and Blurb Format
 
 ### JSON escaping vs. content sanitization
