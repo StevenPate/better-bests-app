@@ -235,6 +235,84 @@ Task phase (integration):
   3 cleanup. Iterates `successfulRegions`, calls the pure functions, uploads
   each result.
 
+## Description Sanitization and Blurb Format
+
+### JSON escaping vs. content sanitization
+
+These are separate concerns:
+
+- **JSON escaping** (quotes → `\"`, newlines → `\n`, control chars → `\uXXXX`)
+  happens automatically in `JSON.stringify`. Any conformant JSON parser reverses
+  it. This is **not our concern** — we do not hand-escape anything.
+- **Content sanitization** normalizes the text itself before it enters the
+  feed. This **is our concern** and is specified below.
+
+### Reference-feed characteristics (verified)
+
+Measured against `bestsellers.json` (100 entries):
+
+- Description length: avg 110 chars, max 343 chars
+- Quotes in description: 2% (handled by JSON.stringify)
+- Embedded newlines in description: 2%
+- HTML tags in description: 0% (reference feed strips HTML)
+
+Google Books descriptions can be longer (500–1000+ chars), and they sometimes
+include HTML tags (`<p>`, `<i>`, `<br>`) that the reference feed does not.
+
+### Sanitization rules
+
+Applied in `sanitizeDescription(raw: string): string`:
+
+1. Strip HTML tags via simple regex: `raw.replace(/<[^>]*>/g, '')`.
+2. Decode common HTML entities (`&amp;`, `&quot;`, `&#39;`, `&mdash;`, `&nbsp;`).
+3. Collapse internal whitespace runs: `/\s+/g → ' '` (preserves single spaces,
+   removes stray tabs, multiple spaces, and accidental newlines from HTML).
+4. Trim leading/trailing whitespace.
+5. Cap length at 500 characters. If truncation occurs, break at the last word
+   boundary before the limit and append `'…'` (U+2026).
+6. If the result is empty after sanitization, return empty string.
+
+### Blurb composition
+
+`composeBlurb(sanitizedDescription, last, weeksOnList)` returns:
+
+```
+{sanitizedDescription}\nRank last week: {last}\nWeeks on list: {weeksOnList}
+```
+
+The `\n` characters are literal newlines in the JavaScript string. `JSON.stringify`
+emits them as `\n` escape sequences in the serialized JSON. Consumers that
+`JSON.parse` the feed get back real newlines. This matches the reference feed
+byte-for-byte.
+
+**Note:** How consumers render `\n` (as `<br>`, as space, as literal newline)
+is the consumer's concern, not the feed's. The reference feed makes the same
+trade-off.
+
+### Unit test fixtures
+
+`sanitizeDescription` tests must cover:
+
+| Input | Expected output |
+|---|---|
+| `""` | `""` |
+| `"plain text"` | `"plain text"` |
+| `"he said \"hi\""` | `"he said \"hi\""` (unchanged; JSON.stringify escapes) |
+| `"line 1\nline 2"` | `"line 1 line 2"` (newlines collapse to space) |
+| `"<p>para</p>"` | `"para"` |
+| `"bold <b>word</b> here"` | `"bold word here"` |
+| `"Smith &amp; Jones"` | `"Smith & Jones"` |
+| `"  padded  "` | `"padded"` |
+| `"a".repeat(600)` | `"aaa…aaa…"` length ≤ 500 |
+| `"word ".repeat(200)` | truncated at a word boundary + `…` |
+
+`composeBlurb` tests must cover:
+
+- Empty description: `composeBlurb("", "NEW", "1")` → `"\nRank last week: NEW\nWeeks on list: 1"`
+- Normal case: verify exact newline placement
+- Long description: verify the sanitization already happened upstream (blurb
+  itself does no truncation)
+
 ## Query Cardinality and Batching
 
 Each region has roughly 100 books (8–10 categories × 10–15 books). The
