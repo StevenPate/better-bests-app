@@ -313,4 +313,41 @@ describe("assembleFeedJson", () => {
     expect(fiction?.entries.every((e) => e.isbn !== "BAD")).toBe(true);
     expect(fiction?.entries).toHaveLength(2);
   });
+
+  it("produces the exact reference-compatible title string", () => {
+    const feed = assembleFeedJson(baseArgs);
+    expect(feed.title).toBe("PNBA Indie Bestsellers for April 15th, 2026");
+  });
+
+  it("produces the exact reference-compatible description string", () => {
+    const feed = assembleFeedJson(baseArgs);
+    expect(feed.description).toBe(
+      "For the week ending April 12th, 2026, based on sales in independent bookstores from the Pacific Northwest Booksellers Association."
+    );
+  });
+
+  it("emits '0' for weeks_on_list when no entry in the weeksOnList map", () => {
+    const args = { ...baseArgs, weeksOnList: {} };
+    const feed = assembleFeedJson(args);
+    const entry = feed.sections.flatMap((s) => s.entries)[0];
+    expect(entry.weeks_on_list).toBe("0");
+  });
+
+  it("groups books with null category under 'UNCATEGORIZED'", () => {
+    const args = {
+      ...baseArgs,
+      currentBooks: [
+        {
+          isbn: "9780593804216",
+          title: "No Category",
+          author: "A",
+          publisher: "P",
+          rank: 1,
+          category: null,
+        },
+      ],
+    };
+    const feed = assembleFeedJson(args);
+    expect(feed.sections.map((s) => s.title)).toContain("UNCATEGORIZED");
+  });
 });
