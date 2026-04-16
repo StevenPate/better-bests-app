@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Book } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,14 +20,33 @@ function getOpenLibraryCoverUrl(isbn: string, size: 'S' | 'M' | 'L' = 'M'): stri
 }
 
 /**
+ * Build BookSense image URLs from a 13-digit ISBN.
+ * BookSense hosts covers for titles that appear on indie bestseller lists.
+ * Returns null if ISBN isn't a valid 13-digit numeric string.
+ */
+function getBookSenseUrls(isbn: string): { large: string; small: string } | null {
+  const clean = isbn.replace(/[-\s]/g, '');
+  if (!/^\d{13}$/.test(clean)) return null;
+  const last3 = clean.slice(10, 13);
+  const mid3 = clean.slice(7, 10);
+  return {
+    large: `https://images.booksense.com/images/${last3}/${mid3}/${clean}.jpg`,
+    small: `https://images.booksense.com/images/books/${last3}/${mid3}/FC${clean}.JPG`,
+  };
+}
+
+/**
  * BookCoverImage - A resilient book cover component with multiple fallbacks
  *
  * Fallback chain:
  * 1. initialSrc (Google Books URL from cache)
- * 2. Open Library cover API
- * 3. Styled placeholder with Book icon
+ * 2. BookSense large (indie bestseller cover host)
+ * 3. BookSense small (alt format, FC-prefixed)
+ * 4. Open Library cover API
+ * 5. Styled placeholder with Book icon
  *
  * Handles broken images gracefully by detecting load failures
+ * (including Open Library's 1×1 pixel "missing" response)
  * and automatically trying the next source in the chain.
  */
 export function BookCoverImage({
@@ -38,10 +57,6 @@ export function BookCoverImage({
   placeholderClassName,
   size = 'md',
 }: BookCoverImageProps) {
-  const [currentSrc, setCurrentSrc] = useState<string | null>(initialSrc || null);
-  const [fallbackAttempted, setFallbackAttempted] = useState(false);
-  const [showPlaceholder, setShowPlaceholder] = useState(!initialSrc);
-
   // Size mappings
   const sizeStyles = {
     sm: 'w-12 h-16',
@@ -51,30 +66,34 @@ export function BookCoverImage({
 
   const openLibrarySize = size === 'sm' ? 'S' : size === 'lg' ? 'L' : 'M';
 
-  // Reset state when ISBN changes
-  useEffect(() => {
-    setCurrentSrc(initialSrc || null);
-    setFallbackAttempted(false);
-    setShowPlaceholder(!initialSrc);
-  }, [isbn, initialSrc]);
-
-  // If no initial source, try Open Library directly
-  useEffect(() => {
-    if (!initialSrc && !fallbackAttempted) {
-      setCurrentSrc(getOpenLibraryCoverUrl(isbn, openLibrarySize));
-      setShowPlaceholder(false);
+  // Build ordered source chain for this ISBN
+  const sources = useMemo(() => {
+    const list: string[] = [];
+    if (initialSrc) list.push(initialSrc);
+    const bs = getBookSenseUrls(isbn);
+    if (bs) {
+      list.push(bs.large);
+      list.push(bs.small);
     }
-  }, [isbn, initialSrc, fallbackAttempted, openLibrarySize]);
+    list.push(getOpenLibraryCoverUrl(isbn, openLibrarySize));
+    return list;
+  }, [isbn, initialSrc, openLibrarySize]);
+
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [showPlaceholder, setShowPlaceholder] = useState(sources.length === 0);
+  const currentSrc = sources[sourceIndex] ?? null;
+
+  // Reset when ISBN or source chain changes
+  useEffect(() => {
+    setSourceIndex(0);
+    setShowPlaceholder(sources.length === 0);
+  }, [isbn, sources]);
 
   const handleImageError = () => {
-    if (!fallbackAttempted) {
-      // Try Open Library as fallback
-      setFallbackAttempted(true);
-      setCurrentSrc(getOpenLibraryCoverUrl(isbn, openLibrarySize));
+    if (sourceIndex + 1 < sources.length) {
+      setSourceIndex(sourceIndex + 1);
     } else {
-      // All sources failed, show placeholder
       setShowPlaceholder(true);
-      setCurrentSrc(null);
     }
   };
 

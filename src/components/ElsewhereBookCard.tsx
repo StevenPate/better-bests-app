@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ElsewhereBook } from '@/types/elsewhere';
 import { TrendingUp, TrendingDown, Minus, Sparkles, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { BookCoverImage } from '@/components/BookCoverImage';
 
 interface ElsewhereBookCardProps {
   book: ElsewhereBook;
@@ -64,17 +65,14 @@ export function ElsewhereBookCard({ book, targetRegion }: ElsewhereBookCardProps
         <div className="flex gap-4">
           {/* Book Cover */}
           <div className="flex-shrink-0">
-            {book.coverUrl ? (
-              <img
-                src={book.coverUrl}
-                alt={`Cover of ${book.title}`}
-                className="w-20 h-28 object-cover rounded border border-border"
-              />
-            ) : (
-              <div className="w-20 h-28 bg-muted rounded border border-border flex items-center justify-center text-xs text-muted-foreground p-2 text-center">
-                No cover
-              </div>
-            )}
+            <BookCoverImage
+              isbn={book.isbn}
+              title={book.title}
+              initialSrc={book.coverUrl}
+              size="md"
+              className="w-20 h-28 border border-border"
+              placeholderClassName="w-20 h-28"
+            />
           </div>
 
           {/* Title and Author */}
