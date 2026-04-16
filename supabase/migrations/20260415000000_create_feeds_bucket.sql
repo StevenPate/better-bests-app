@@ -15,12 +15,14 @@ ON CONFLICT (id) DO UPDATE SET
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- Allow public read access to feeds bucket
+DROP POLICY IF EXISTS "Public read access on feeds" ON storage.objects;
 CREATE POLICY "Public read access on feeds"
   ON storage.objects
   FOR SELECT
   USING (bucket_id = 'feeds');
 
 -- Allow service role to write (Trigger.dev task uses SERVICE_ROLE_KEY)
+DROP POLICY IF EXISTS "Service role write access on feeds" ON storage.objects;
 CREATE POLICY "Service role write access on feeds"
   ON storage.objects
   FOR ALL
