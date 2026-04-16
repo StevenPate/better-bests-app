@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildBookSenseImageUrls } from "./feedGenerator";
 import { sanitizeDescription } from "./feedGenerator";
+import { composeBlurb } from "./feedGenerator";
 
 describe("buildBookSenseImageUrls", () => {
   it("builds correct small and large URLs for a 13-digit ISBN", () => {
@@ -113,5 +114,27 @@ describe("sanitizeDescription", () => {
 
   it("drops invalid numeric entities", () => {
     expect(sanitizeDescription("bad&#0;x")).toBe("badx");
+  });
+});
+
+describe("composeBlurb", () => {
+  it("composes a blurb with description, last rank, and weeks on list", () => {
+    const result = composeBlurb("A great book.", "NEW", "1");
+    expect(result).toBe("A great book.\nRank last week: NEW\nWeeks on list: 1");
+  });
+
+  it("handles empty description", () => {
+    const result = composeBlurb("", "3", "12");
+    expect(result).toBe("\nRank last week: 3\nWeeks on list: 12");
+  });
+
+  it("handles numeric last rank", () => {
+    const result = composeBlurb("Desc", "5", "7");
+    expect(result).toBe("Desc\nRank last week: 5\nWeeks on list: 7");
+  });
+
+  it("does not sanitize (caller's responsibility)", () => {
+    const result = composeBlurb("has <p>tags</p>", "NEW", "1");
+    expect(result).toContain("<p>tags</p>");
   });
 });

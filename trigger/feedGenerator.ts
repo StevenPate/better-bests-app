@@ -75,3 +75,11 @@ export function sanitizeDescription(raw: string): string {
 
   return text;
 }
+
+export function composeBlurb(
+  description: string,
+  last: string,
+  weeksOnList: string
+): string {
+  return `${description}\nRank last week: ${last}\nWeeks on list: ${weeksOnList}`;
+}
