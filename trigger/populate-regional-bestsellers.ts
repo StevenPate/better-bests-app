@@ -209,159 +209,159 @@ export const populateRegionalBestsellers = schedules.task({
     );
 
     const populatedRegions = regionChecks.filter((r) => r.hasData);
-    if (populatedRegions.length >= REGIONS.length) {
-      logger.info("All regions already populated for this week, skipping", {
+    const alreadyPopulatedAll = populatedRegions.length >= REGIONS.length;
+
+    // Accumulators hoisted so Phase 4 can run even when Phases 1-2 are skipped
+    const allBooks: RegionalBook[] = [];
+    const successfulRegions: string[] = [];
+    let insertedCount = 0;
+    let errorCount = 0;
+    let totalScores = 0;
+
+    if (alreadyPopulatedAll) {
+      logger.info("All regions already populated for this week, skipping fetch", {
         weekDate: weekDateISO,
         regions: populatedRegions.map((r) => r.region),
       });
-      return { success: true, skipped: true, weekDate: weekDateISO };
-    }
+    } else {
+      const missingRegions = regionChecks
+        .filter((r) => !r.hasData)
+        .map((r) => r.region);
 
-    const missingRegions = regionChecks
-      .filter((r) => !r.hasData)
-      .map((r) => r.region);
+      logger.info("Starting regional bestseller population", {
+        weekDate: weekDateISO,
+        regionCount: REGIONS.length,
+        alreadyPopulated: populatedRegions.length,
+        missingRegions,
+      });
 
-    logger.info("Starting regional bestseller population", {
-      weekDate: weekDateISO,
-      regionCount: REGIONS.length,
-      alreadyPopulated: populatedRegions.length,
-      missingRegions,
-    });
+      // --- Phase 1: Fetch and upsert regional bestsellers ---
 
-    // --- Phase 1: Fetch and upsert regional bestsellers ---
+      const regionsToFetch = REGIONS.filter((r) =>
+        missingRegions.includes(r.abbreviation)
+      );
 
-    const regionsToFetch = REGIONS.filter((r) =>
-      missingRegions.includes(r.abbreviation)
-    );
-
-    const allBooks: RegionalBook[] = [];
-    const successfulRegions: string[] = [];
-
-    for (const region of regionsToFetch) {
-      try {
-        const books = await fetchRegionalList(region, weekDate);
-        if (books.length > 0) {
-          allBooks.push(...books);
-          successfulRegions.push(region.abbreviation);
+      for (const region of regionsToFetch) {
+        try {
+          const books = await fetchRegionalList(region, weekDate);
+          if (books.length > 0) {
+            allBooks.push(...books);
+            successfulRegions.push(region.abbreviation);
+          }
+          // Rate limit between requests
+          await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_DELAY));
+        } catch (error) {
+          logger.error(`Error fetching ${region.abbreviation}`, {
+            error: String(error),
+          });
         }
-        // Rate limit between requests
-        await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_DELAY));
-      } catch (error) {
-        logger.error(`Error fetching ${region.abbreviation}`, {
-          error: String(error),
-        });
       }
-    }
 
-    logger.info("Fetch phase complete", {
-      totalBooks: allBooks.length,
-      successfulRegions,
-    });
+      logger.info("Fetch phase complete", {
+        totalBooks: allBooks.length,
+        successfulRegions,
+      });
 
-    if (allBooks.length === 0) {
-      logger.warn("No books fetched from any region, aborting");
-      return { success: false, reason: "no_books_fetched" };
-    }
+      if (allBooks.length === 0) {
+        logger.warn("No books fetched from any region, aborting");
+        return { success: false, reason: "no_books_fetched" };
+      }
 
-    // Batch upsert to regional_bestsellers
-    let insertedCount = 0;
-    let errorCount = 0;
+      // Batch upsert to regional_bestsellers
+      for (let i = 0; i < allBooks.length; i += BATCH_SIZE) {
+        const batch = allBooks.slice(i, i + BATCH_SIZE);
 
-    for (let i = 0; i < allBooks.length; i += BATCH_SIZE) {
-      const batch = allBooks.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase
+          .from("regional_bestsellers")
+          .upsert(batch, {
+            onConflict: "region,isbn,week_date",
+            ignoreDuplicates: false,
+          });
 
-      const { error } = await supabase
-        .from("regional_bestsellers")
-        .upsert(batch, {
-          onConflict: "region,isbn,week_date",
-          ignoreDuplicates: false,
-        });
+        if (error) {
+          logger.error(`Upsert batch ${Math.floor(i / BATCH_SIZE) + 1} failed`, {
+            error: error.message,
+          });
+          errorCount += batch.length;
+        } else {
+          insertedCount += batch.length;
+          logger.info(
+            `Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} books`
+          );
+        }
+      }
 
-      if (error) {
-        logger.error(`Upsert batch ${Math.floor(i / BATCH_SIZE) + 1} failed`, {
-          error: error.message,
-        });
-        errorCount += batch.length;
-      } else {
-        insertedCount += batch.length;
-        logger.info(
-          `Upserted batch ${Math.floor(i / BATCH_SIZE) + 1}: ${batch.length} books`
+      // --- Phase 2: Calculate weekly scores (inlined from calculate-weekly-scores) ---
+
+      for (const regionCode of successfulRegions) {
+        const { data: books, error: fetchError } = await supabase
+          .from("regional_bestsellers")
+          .select("isbn, region, week_date, rank, category")
+          .eq("week_date", weekDateISO)
+          .eq("region", regionCode);
+
+        if (fetchError) {
+          logger.error(`Failed to fetch books for scoring: ${regionCode}`, {
+            error: fetchError.message,
+          });
+          continue;
+        }
+
+        if (!books || books.length === 0) {
+          logger.warn(`No books found for scoring: ${regionCode}`);
+          continue;
+        }
+
+        // Determine list_size per category
+        const categoryListSizes: Record<string, number> = {};
+        books.forEach(
+          (book: { category: string | null; rank: number; isbn: string }) => {
+            const cat = book.category || "General";
+            categoryListSizes[cat] = (categoryListSizes[cat] || 0) + 1;
+          }
         );
-      }
-    }
 
-    // --- Phase 2: Calculate weekly scores (inlined from calculate-weekly-scores) ---
+        // Calculate scores
+        const scores = books.map(
+          (book: {
+            isbn: string;
+            region: string;
+            week_date: string;
+            rank: number;
+            category: string | null;
+          }) => {
+            const cat = book.category || "General";
+            const listSize = categoryListSizes[cat];
+            return {
+              isbn: book.isbn,
+              region: book.region,
+              week_date: book.week_date,
+              rank: book.rank,
+              category: cat,
+              list_size: listSize,
+              points: calculateScore(book.rank, listSize),
+            };
+          }
+        );
 
-    let totalScores = 0;
+        const { error: upsertError } = await supabase
+          .from("weekly_scores")
+          .upsert(scores, {
+            onConflict: "isbn,region,week_date,category",
+            ignoreDuplicates: false,
+          });
 
-    for (const regionCode of successfulRegions) {
-      const { data: books, error: fetchError } = await supabase
-        .from("regional_bestsellers")
-        .select("isbn, region, week_date, rank, category")
-        .eq("week_date", weekDateISO)
-        .eq("region", regionCode);
-
-      if (fetchError) {
-        logger.error(`Failed to fetch books for scoring: ${regionCode}`, {
-          error: fetchError.message,
-        });
-        continue;
-      }
-
-      if (!books || books.length === 0) {
-        logger.warn(`No books found for scoring: ${regionCode}`);
-        continue;
-      }
-
-      // Determine list_size per category
-      const categoryListSizes: Record<string, number> = {};
-      books.forEach(
-        (book: { category: string | null; rank: number; isbn: string }) => {
-          const cat = book.category || "General";
-          categoryListSizes[cat] = (categoryListSizes[cat] || 0) + 1;
+        if (upsertError) {
+          logger.error(`Failed to upsert scores for ${regionCode}`, {
+            error: upsertError.message,
+          });
+        } else {
+          totalScores += scores.length;
+          logger.info(`Scores calculated for ${regionCode}`, {
+            count: scores.length,
+            categories: Object.keys(categoryListSizes),
+          });
         }
-      );
-
-      // Calculate scores
-      const scores = books.map(
-        (book: {
-          isbn: string;
-          region: string;
-          week_date: string;
-          rank: number;
-          category: string | null;
-        }) => {
-          const cat = book.category || "General";
-          const listSize = categoryListSizes[cat];
-          return {
-            isbn: book.isbn,
-            region: book.region,
-            week_date: book.week_date,
-            rank: book.rank,
-            category: cat,
-            list_size: listSize,
-            points: calculateScore(book.rank, listSize),
-          };
-        }
-      );
-
-      const { error: upsertError } = await supabase
-        .from("weekly_scores")
-        .upsert(scores, {
-          onConflict: "isbn,region,week_date,category",
-          ignoreDuplicates: false,
-        });
-
-      if (upsertError) {
-        logger.error(`Failed to upsert scores for ${regionCode}`, {
-          error: upsertError.message,
-        });
-      } else {
-        totalScores += scores.length;
-        logger.info(`Scores calculated for ${regionCode}`, {
-          count: scores.length,
-          categories: Object.keys(categoryListSizes),
-        });
       }
     }
 
@@ -386,6 +386,15 @@ export const populateRegionalBestsellers = schedules.task({
 
     // --- Phase 4: Generate regional JSON feeds ---
 
+    // Iterate over all regions with current-week data (fetched this run +
+    // already populated at run start), so feeds regenerate on any trigger
+    const regionsWithData = Array.from(
+      new Set([
+        ...populatedRegions.map((r) => r.region),
+        ...successfulRegions,
+      ])
+    );
+
     const feedGeneration: {
       succeeded: string[];
       skipped: Array<{ region: string; reason: string }>;
@@ -402,7 +411,7 @@ export const populateRegionalBestsellers = schedules.task({
     previousWeekDate.setUTCDate(previousWeekDate.getUTCDate() - 7);
     const previousWeekDateISO = formatAsISO(previousWeekDate);
 
-    for (const regionCode of successfulRegions) {
+    for (const regionCode of regionsWithData) {
       const region = REGIONS.find((r) => r.abbreviation === regionCode);
       if (!region) {
         feedGeneration.skipped.push({
@@ -522,11 +531,11 @@ export const populateRegionalBestsellers = schedules.task({
     // If all regions failed, throw so Trigger.dev retries the task
     if (
       feedGeneration.succeeded.length === 0 &&
-      feedGeneration.failed.length === successfulRegions.length &&
-      successfulRegions.length > 0
+      feedGeneration.failed.length === regionsWithData.length &&
+      regionsWithData.length > 0
     ) {
       throw new Error(
-        `All ${successfulRegions.length} regions failed feed generation`
+        `All ${regionsWithData.length} regions failed feed generation`
       );
     }
 
