@@ -15,3 +15,48 @@ export function buildBookSenseImageUrls(isbn: string): {
     large: `https://images.booksense.com/images/${last3}/${mid3}/${normalized}.jpg`,
   };
 }
+
+const MAX_DESCRIPTION_LENGTH = 500;
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&quot;": '"',
+  "&apos;": "'",
+  "&#39;": "'",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&mdash;": "—",
+  "&ndash;": "–",
+  "&nbsp;": " ",
+};
+
+export function sanitizeDescription(raw: string): string {
+  if (!raw) return "";
+
+  // 1. Strip HTML tags
+  let text = raw.replace(/<[^>]*>/g, "");
+
+  // 2. Decode common HTML entities
+  for (const [entity, replacement] of Object.entries(HTML_ENTITIES)) {
+    text = text.split(entity).join(replacement);
+  }
+
+  // 3. Collapse whitespace runs
+  text = text.replace(/\s+/g, " ");
+
+  // 4. Trim
+  text = text.trim();
+
+  if (!text) return "";
+
+  // 5. Cap length with word-boundary truncation
+  if (text.length > MAX_DESCRIPTION_LENGTH) {
+    const cutoff = MAX_DESCRIPTION_LENGTH - 1; // leave room for ellipsis
+    const slice = text.slice(0, cutoff);
+    const lastSpace = slice.lastIndexOf(" ");
+    const truncated = lastSpace > cutoff * 0.5 ? slice.slice(0, lastSpace) : slice;
+    text = truncated + "…";
+  }
+
+  return text;
+}
