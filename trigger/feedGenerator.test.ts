@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildBookSenseImageUrls } from "./feedGenerator";
-import { sanitizeDescription } from "./feedGenerator";
-import { composeBlurb } from "./feedGenerator";
-import { computeLastRank } from "./feedGenerator";
-import { assembleFeedJson } from "./feedGenerator";
+import {
+  buildBookSenseImageUrls,
+  sanitizeDescription,
+  composeBlurb,
+  computeLastRank,
+  assembleFeedJson,
+} from "./feedGenerator";
 
 describe("buildBookSenseImageUrls", () => {
   it("builds correct small and large URLs for a 13-digit ISBN", () => {
