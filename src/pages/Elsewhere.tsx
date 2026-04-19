@@ -25,7 +25,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, ExternalLink, RefreshCw } from 'lucide-react';
 import { SortOption } from '@/types/elsewhere';
 
 const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
@@ -143,15 +143,26 @@ export default function Elsewhere() {
               </p>
             </div>
             {!isLoading && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => refetch()}
-                className="gap-2"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/feeds/elsewhere/${currentRegion.abbreviation}.json`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  JSON Feed
+                </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetch()}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
             )}
           </div>
         </header>

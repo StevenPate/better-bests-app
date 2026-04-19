@@ -5,6 +5,7 @@ import {
   type CurrentBook,
   type PreviousWeekBook,
 } from "./feedGenerator";
+import { generateElsewhereFeeds } from "./generate-elsewhere-feeds";
 
 // Region configuration (sync with src/config/regions.ts)
 const REGIONS = [
@@ -538,6 +539,10 @@ export const populateRegionalBestsellers = schedules.task({
         `All ${regionsWithData.length} regions failed feed generation`
       );
     }
+
+    // --- Phase 5: Trigger elsewhere feed generation ---
+    await generateElsewhereFeeds.trigger();
+    logger.info("Triggered elsewhere feed generation");
 
     const result = {
       success: true,
