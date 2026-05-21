@@ -29,7 +29,7 @@ function getCurrentWeekUrls() {
 }
 
 function parseRegionalList(content: string, region: string): RegionalBook[] {
-  const lines = content.split('\n').map(line => line.trim()).filter(line => line);
+  const lines = content.split(/\r?\n|\r/).map(line => line.trim()).filter(line => line);
   const books: RegionalBook[] = [];
   
   let currentCategory = '';

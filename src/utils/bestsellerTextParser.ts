@@ -1,7 +1,7 @@
 import { BestsellerList, BestsellerCategory, BestsellerBook } from '@/types/bestseller';
 
 export function parseList(content: string): BestsellerList {
-  const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  const lines = content.split(/\r?\n|\r/).map(line => line.trim()).filter(line => line.length > 0);
 
   let title = '';
   let date = '';

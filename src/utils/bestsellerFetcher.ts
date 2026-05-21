@@ -351,11 +351,16 @@ export class BestsellerParser {
       logger.debug('BestsellerParser', 'Checking for cached data...');
       const cachedData = await this.getCachedData(cacheKey);
       if (cachedData?.data) {
-        logger.debug('BestsellerParser', `Using cached data for ${cacheKey} (no refresh)`);
-        logger.debug('BestsellerParser', 'Cached current list date:', cachedData.data.current?.date);
-        return cachedData.data;
+        // Validate cached data has actual categories; empty categories = bad cache from parse failure
+        const cachedCurrent = (cachedData.data as Record<string, unknown>)?.current as Record<string, unknown> | undefined;
+        if (cachedCurrent?.categories && Array.isArray(cachedCurrent.categories) && cachedCurrent.categories.length > 0) {
+          logger.debug('BestsellerParser', `Using cached data for ${cacheKey} (no refresh)`);
+          logger.debug('BestsellerParser', 'Cached current list date:', cachedCurrent?.date);
+          return cachedData.data;
+        }
+        logger.warn('BestsellerParser', `Cached data for ${cacheKey} has empty categories — fetching fresh`);
       }
-      logger.debug('BestsellerParser', 'No cached data found');
+      logger.debug('BestsellerParser', 'No valid cached data found');
     }
 
     logger.debug('[BestsellerParser]', refresh ? 'Refreshing data from bookweb.org' : 'Fetching new data from bookweb.org');

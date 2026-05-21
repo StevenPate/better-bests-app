@@ -70,7 +70,7 @@ function parseRegionalList(
   weekDate: string
 ): RegionalBook[] {
   const lines = content
-    .split("\n")
+    .split(/\r?\n|\r/)
     .map((line) => line.trim())
     .filter((line) => line);
   const books: RegionalBook[] = [];
