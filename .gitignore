@@ -67,3 +67,6 @@ supabase/.env*
 *.tmp
 *.temp
 *~
+
+# Local Netlify folder
+.netlify

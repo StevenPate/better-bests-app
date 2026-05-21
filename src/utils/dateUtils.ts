@@ -8,6 +8,7 @@ export class DateUtils {
     const daysToSubtract = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4;
     const wednesday = new Date(today);
     wednesday.setDate(today.getDate() - daysToSubtract);
+    wednesday.setHours(12, 0, 0, 0); // Noon local — prevents UTC day-shift in US timezones
     return wednesday;
   }
 

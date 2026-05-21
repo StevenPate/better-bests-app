@@ -67,7 +67,7 @@ export function Footer() {
                 <Github className="w-4 h-4" />
                 View Source
               </a>
-              <span>© 2025 Steven Pate</span>
+              <span>© {new Date().getFullYear()} Steven Pate</span>
             </div>
           </div>
         </div>

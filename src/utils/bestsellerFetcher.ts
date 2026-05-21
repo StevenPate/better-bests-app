@@ -519,6 +519,16 @@ export class BestsellerParser {
         return cachedData.data;
       }
 
+      // If comparison fetch failed, fall back to current week cache (has comparison data built-in)
+      if (comparisonWeek) {
+        const currentCacheKey = `${region}_current_bestseller_list_v2`;
+        const currentCached = await this.getCachedData(currentCacheKey);
+        if (currentCached?.data) {
+          logger.debug('BestsellerParser', 'Comparison fetch failed, falling back to current week cache');
+          return currentCached.data;
+        }
+      }
+
       // No cache available - backend job needs to run
       logger.error('BestsellerParser', 'No cached data found. Backend job needs to fetch data.');
       throw new Error('No data available. Please wait for the backend job to fetch data, or trigger it manually.');
