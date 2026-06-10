@@ -241,6 +241,40 @@ export class BestsellerParser {
   }
 
 
+  // Cache for Google Drive URLs scraped from bookweb.org
+  private static driveUrlsCache: { urls: Record<string, string>; fetchedAt: number } | null = null;
+  private static readonly DRIVE_URLS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+  /**
+   * Fetch Google Drive URLs from the scrape-regional-urls edge function.
+   * Results are cached in memory for 1 hour.
+   */
+  private static async getGoogleDriveUrls(): Promise<Record<string, string>> {
+    if (this.driveUrlsCache && Date.now() - this.driveUrlsCache.fetchedAt < this.DRIVE_URLS_CACHE_TTL) {
+      return this.driveUrlsCache.urls;
+    }
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scrape-regional-urls`,
+        {
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+        }
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const urls = data.urls || {};
+      this.driveUrlsCache = { urls, fetchedAt: Date.now() };
+      logger.debug('BestsellerParser', `Fetched ${Object.keys(urls).length} Google Drive URLs`);
+      return urls;
+    } catch (error) {
+      logger.warn('BestsellerParser', 'Failed to fetch Google Drive URLs:', error);
+      return {};
+    }
+  }
+
   // CORS proxy fallbacks (ordered by reliability)
   private static readonly CORS_PROXIES = [
     // Our own Supabase edge function (most reliable, runs on our infrastructure)
@@ -396,8 +430,11 @@ export class BestsellerParser {
         previousWednesday.setDate(currentWednesday.getDate() - 7);
       }
 
+      // Discover Google Drive URLs for current week
+      const driveUrls = await this.getGoogleDriveUrls();
+
       // Try to fetch current week first
-      const { current, previous } = this.getListUrls(currentWednesday, previousWednesday, region);
+      const { current, previous } = this.getListUrls(currentWednesday, previousWednesday, region, driveUrls);
 
       logger.debug('BestsellerParser', 'Fetching URLs:', { current, previous });
       logger.debug('BestsellerParser', 'Starting parallel fetch with proxy fallbacks...');
@@ -575,7 +612,7 @@ export class BestsellerParser {
     }
   }
 
-  static getListUrls(currentWednesday?: Date, previousWednesday?: Date, region: string = 'PNBA') {
+  static getListUrls(currentWednesday?: Date, previousWednesday?: Date, region: string = 'PNBA', driveUrls?: Record<string, string>) {
     if (!currentWednesday) currentWednesday = DateUtils.getMostRecentWednesday();
     if (!previousWednesday) {
       previousWednesday = DateUtils.getPreviousWednesday();
@@ -585,8 +622,12 @@ export class BestsellerParser {
     const regionConfig = getRegionByAbbreviation(region);
     const fileCode = regionConfig?.file_code || 'pn'; // Default to PNBA file code
 
-    const current = `https://www.bookweb.org/sites/default/files/regional_bestseller/${DateUtils.formatAsYYMMDD(currentWednesday)}${fileCode}.txt`;
-    const previous = `https://www.bookweb.org/sites/default/files/regional_bestseller/${DateUtils.formatAsYYMMDD(previousWednesday)}${fileCode}.txt`;
+    const bookwebBase = 'https://www.bookweb.org/sites/default/files/regional_bestseller/';
+
+    // Use Google Drive URL for current week if available; always use bookweb.org for previous/historical
+    const driveUrl = driveUrls?.[region];
+    const current = driveUrl || `${bookwebBase}${DateUtils.formatAsYYMMDD(currentWednesday)}${fileCode}.txt`;
+    const previous = `${bookwebBase}${DateUtils.formatAsYYMMDD(previousWednesday)}${fileCode}.txt`;
 
     return { current, previous };
   }

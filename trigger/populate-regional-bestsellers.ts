@@ -6,6 +6,7 @@ import {
   type PreviousWeekBook,
 } from "./feedGenerator";
 import { generateElsewhereFeeds } from "./generate-elsewhere-feeds";
+import { scrapeGoogleDriveUrls } from "./bookweb-scraper";
 
 // Region configuration (sync with src/config/regions.ts)
 const REGIONS = [
@@ -150,13 +151,37 @@ function parseRegionalList(
 
 async function fetchRegionalList(
   region: { abbreviation: string; file_code: string },
-  weekDate: Date
+  weekDate: Date,
+  driveUrls?: Record<string, string>
 ): Promise<RegionalBook[]> {
   const dateStr = formatAsYYMMDD(weekDate);
   const isoDate = formatAsISO(weekDate);
-  const url = `https://www.bookweb.org/sites/default/files/regional_bestseller/${dateStr}${region.file_code}.txt`;
 
-  logger.info(`Fetching ${region.abbreviation}`, { url });
+  // Try Google Drive URL first if available
+  const driveUrl = driveUrls?.[region.abbreviation];
+  if (driveUrl) {
+    logger.info(`Fetching ${region.abbreviation} from Google Drive`, { url: driveUrl });
+    try {
+      const response = await fetch(driveUrl);
+      if (response.ok) {
+        const content = await response.text();
+        const books = parseRegionalList(content, region.abbreviation, isoDate);
+        if (books.length > 0) {
+          logger.info(`Parsed ${region.abbreviation} from Google Drive`, { bookCount: books.length });
+          return books;
+        }
+        logger.warn(`Google Drive file for ${region.abbreviation} parsed 0 books, falling back to bookweb.org`);
+      } else {
+        logger.warn(`Google Drive fetch failed for ${region.abbreviation}`, { status: response.status });
+      }
+    } catch (error) {
+      logger.warn(`Google Drive fetch error for ${region.abbreviation}`, { error: String(error) });
+    }
+  }
+
+  // Fallback to old bookweb.org URL
+  const url = `https://www.bookweb.org/sites/default/files/regional_bestseller/${dateStr}${region.file_code}.txt`;
+  logger.info(`Fetching ${region.abbreviation} from bookweb.org`, { url });
 
   const response = await fetch(url);
 
@@ -229,6 +254,22 @@ export const populateRegionalBestsellers = schedules.task({
         .filter((r) => !r.hasData)
         .map((r) => r.region);
 
+      // Scrape Google Drive URLs once before fetching individual regions
+      let driveUrls: Record<string, string> = {};
+      try {
+        const scrapeResult = await scrapeGoogleDriveUrls();
+        driveUrls = scrapeResult.urls;
+        logger.info("Scraped Google Drive URLs", {
+          regionCount: Object.keys(driveUrls).length,
+          regions: Object.keys(driveUrls),
+          weekEndDate: scrapeResult.weekEndDate,
+        });
+      } catch (error) {
+        logger.warn("Failed to scrape Google Drive URLs, will use bookweb.org fallback", {
+          error: String(error),
+        });
+      }
+
       logger.info("Starting regional bestseller population", {
         weekDate: weekDateISO,
         regionCount: REGIONS.length,
@@ -244,7 +285,7 @@ export const populateRegionalBestsellers = schedules.task({
 
       for (const region of regionsToFetch) {
         try {
-          const books = await fetchRegionalList(region, weekDate);
+          const books = await fetchRegionalList(region, weekDate, driveUrls);
           if (books.length > 0) {
             allBooks.push(...books);
             successfulRegions.push(region.abbreviation);

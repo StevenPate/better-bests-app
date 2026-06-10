@@ -682,6 +682,44 @@ Author Name, Publisher, 9781234567890, $25.00
       expect(current).toContain('pn.txt');
       expect(previous).toContain('pn.txt');
     });
+
+    it('should use Google Drive URL for current week when available', () => {
+      const currentWed = new Date('2024-01-10T00:00:00');
+      const previousWed = new Date('2024-01-03T00:00:00');
+      const driveUrls = {
+        PNBA: 'https://drive.usercontent.google.com/download?id=ABC123&export=download',
+      };
+
+      const { current, previous } = BestsellerParser.getListUrls(currentWed, previousWed, 'PNBA', driveUrls);
+
+      expect(current).toBe('https://drive.usercontent.google.com/download?id=ABC123&export=download');
+      // Previous should always use bookweb.org
+      expect(previous).toContain('bookweb.org');
+      expect(previous).toContain('240103pn.txt');
+    });
+
+    it('should fall back to bookweb.org when no drive URL for region', () => {
+      const currentWed = new Date('2024-01-10T00:00:00');
+      const previousWed = new Date('2024-01-03T00:00:00');
+      const driveUrls = {
+        SIBA: 'https://drive.usercontent.google.com/download?id=XYZ789&export=download',
+      };
+
+      const { current, previous } = BestsellerParser.getListUrls(currentWed, previousWed, 'PNBA', driveUrls);
+
+      expect(current).toContain('bookweb.org');
+      expect(current).toContain('240110pn.txt');
+      expect(previous).toContain('bookweb.org');
+    });
+
+    it('should fall back to bookweb.org when driveUrls is empty', () => {
+      const currentWed = new Date('2024-01-10T00:00:00');
+      const previousWed = new Date('2024-01-03T00:00:00');
+
+      const { current } = BestsellerParser.getListUrls(currentWed, previousWed, 'PNBA', {});
+
+      expect(current).toContain('bookweb.org');
+    });
   });
 
   describe('edge cases', () => {

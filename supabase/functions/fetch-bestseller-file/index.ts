@@ -1,13 +1,12 @@
 /**
- * Simple CORS proxy for fetching bestseller files from bookweb.org
+ * CORS proxy for fetching bestseller files from bookweb.org and Google Drive.
  *
  * This bypasses browser CORS restrictions by fetching from the server side.
- * More reliable than public CORS proxies which frequently fail.
  *
  * Security:
- * - Strict hostname validation (only bookweb.org or www.bookweb.org)
+ * - Strict hostname validation (bookweb.org + drive.usercontent.google.com)
  * - Rate limiting via Supabase platform (automatic)
- * - Only allows HTTPS requests to /regional_bestseller/ path
+ * - Only allows HTTPS requests to allowed paths
  * - Input validation on all parameters
  */
 
@@ -20,10 +19,11 @@ const corsHeaders = {
 };
 
 /**
- * Validate URL is strictly from bookweb.org domain
- * Prevents bypass with bookweb.org.evil.com
+ * Validate URL is an allowed fetch target:
+ * - bookweb.org /regional_bestseller/ paths (legacy)
+ * - drive.usercontent.google.com /download paths (new Google Drive hosting)
  */
-function isValidBookwebUrl(urlString: string): boolean {
+function isValidFetchUrl(urlString: string): boolean {
   try {
     const url = new URL(urlString);
 
@@ -32,18 +32,19 @@ function isValidBookwebUrl(urlString: string): boolean {
       return false;
     }
 
-    // Strict hostname check (not includes check)
     const hostname = url.hostname.toLowerCase();
-    if (hostname !== 'bookweb.org' && hostname !== 'www.bookweb.org') {
-      return false;
+
+    // bookweb.org: only /regional_bestseller/ path
+    if (hostname === 'bookweb.org' || hostname === 'www.bookweb.org') {
+      return url.pathname.includes('/regional_bestseller/');
     }
 
-    // Only allow regional_bestseller path
-    if (!url.pathname.includes('/regional_bestseller/')) {
-      return false;
+    // Google Drive download: only /download path
+    if (hostname === 'drive.usercontent.google.com') {
+      return url.pathname === '/download';
     }
 
-    return true;
+    return false;
   } catch {
     return false;
   }
@@ -79,11 +80,11 @@ serve(async (req: Request) => {
     }
 
     // Strict URL validation
-    if (!isValidBookwebUrl(targetUrl)) {
+    if (!isValidFetchUrl(targetUrl)) {
       console.warn('Invalid URL blocked:', targetUrl);
       return new Response(
         JSON.stringify({
-          error: 'Invalid URL - only HTTPS requests to bookweb.org/regional_bestseller/ are allowed'
+          error: 'Invalid URL - only HTTPS requests to bookweb.org/regional_bestseller/ or drive.usercontent.google.com/download are allowed'
         }),
         {
           status: 400,
@@ -131,12 +132,12 @@ serve(async (req: Request) => {
         }
 
         // Verify it looks like actual bestseller list data
-        // All valid PNBA files contain these keywords
-        if (!text.includes('Pacific Northwest') &&
-            !text.includes('Bestseller') &&
-            !text.includes('IndieBound') &&
-            !text.includes('PNBA')) {
-          console.warn('⚠️ Content does not appear to be bestseller list data');
+        // Check for keywords common across all regional bestseller files
+        const upper = text.toUpperCase();
+        if (!upper.includes('BESTSELLER') &&
+            !upper.includes('INDEPENDENT BESTSELLERS') &&
+            !upper.includes('INDIEBOUND')) {
+          console.warn('Content does not appear to be bestseller list data');
           console.log('First 200 chars:', text.substring(0, 200));
           throw new Error('Content does not appear to be bestseller list data');
         }
