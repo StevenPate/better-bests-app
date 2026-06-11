@@ -1,4 +1,5 @@
 import { logger } from "@trigger.dev/sdk";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const BOOKWEB_REGIONAL_URL =
   "https://www.bookweb.org/indiebound/bestsellers/regional";
@@ -86,6 +87,79 @@ export function parseGoogleDriveUrls(html: string): {
  * so we check a hard-coded map first.  All other regions use the pattern
  * "Full Name (ABBR)" — we extract the abbreviation from the parentheses.
  */
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Convert a week-end date string like "June 7, 2026" (typically a Sunday)
+ * to the corresponding Wednesday publication date as "YYYY-MM-DD".
+ *
+ * The bookweb.org page shows "Sales Week Ended Sunday, June 7, 2026".
+ * Bestseller files are published on Wednesday, which is 3 days before the
+ * following Sunday — i.e. the Wednesday of the same ISO week. We subtract
+ * (day-of-week + 4) % 7 days to land on Wednesday regardless of the input day.
+ */
+export function wednesdayFromWeekEndDate(weekEndDateStr: string): string {
+  const match = weekEndDateStr.match(/(\w+)\s+(\d{1,2}),\s+(\d{4})/);
+  if (!match) throw new Error(`Cannot parse week-end date: "${weekEndDateStr}"`);
+
+  const monthIndex = MONTH_NAMES.indexOf(match[1]);
+  if (monthIndex === -1) throw new Error(`Unknown month: "${match[1]}"`);
+
+  const day = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  // Build date in local time (noon to avoid DST edge cases)
+  const date = new Date(year, monthIndex, day, 12, 0, 0);
+
+  // Move to the most recent Wednesday (day 3)
+  const dow = date.getDay(); // 0=Sun
+  const diff = dow >= 3 ? dow - 3 : dow + 4;
+  date.setDate(date.getDate() - diff);
+
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const d = date.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Persist scraped Google Drive URLs to `fetch_cache` so they survive across weeks.
+ * Cache key: `drive_urls_YYYY-MM-DD` where the date is the Wednesday publication date.
+ */
+export async function cacheDriveUrls(
+  scrapeResult: { urls: Record<string, string>; weekEndDate: string | null },
+  supabaseClient: SupabaseClient
+): Promise<void> {
+  if (!scrapeResult.weekEndDate || Object.keys(scrapeResult.urls).length === 0) {
+    logger.warn("cacheDriveUrls: skipping — no weekEndDate or empty urls");
+    return;
+  }
+
+  const wednesday = wednesdayFromWeekEndDate(scrapeResult.weekEndDate);
+  const cacheKey = `drive_urls_${wednesday}`;
+
+  const { error } = await supabaseClient.from("fetch_cache").upsert(
+    {
+      cache_key: cacheKey,
+      data: {
+        urls: scrapeResult.urls,
+        weekEndDate: scrapeResult.weekEndDate,
+        scrapedAt: new Date().toISOString(),
+      },
+    },
+    { onConflict: "cache_key" }
+  );
+
+  if (error) {
+    logger.warn("cacheDriveUrls: upsert failed", { error: error.message, cacheKey });
+  } else {
+    logger.info("cacheDriveUrls: cached Drive URLs", { cacheKey, regionCount: Object.keys(scrapeResult.urls).length });
+  }
+}
+
 function mapTextToAbbreviation(text: string): string | null {
   // Check CALIBA special cases first
   for (const [label, abbr] of Object.entries(CALIBA_MAP)) {

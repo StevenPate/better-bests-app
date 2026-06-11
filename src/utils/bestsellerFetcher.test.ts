@@ -720,6 +720,105 @@ Author Name, Publisher, 9781234567890, $25.00
 
       expect(current).toContain('bookweb.org');
     });
+
+    it('should use previousDriveUrls for previous week when provided', () => {
+      const currentWed = new Date('2024-01-10T00:00:00');
+      const previousWed = new Date('2024-01-03T00:00:00');
+      const driveUrls = {
+        PNBA: 'https://drive.usercontent.google.com/download?id=CURRENT&export=download',
+      };
+      const previousDriveUrls = {
+        PNBA: 'https://drive.usercontent.google.com/download?id=PREVIOUS&export=download',
+      };
+
+      const { current, previous } = BestsellerParser.getListUrls(currentWed, previousWed, 'PNBA', driveUrls, previousDriveUrls);
+
+      expect(current).toBe('https://drive.usercontent.google.com/download?id=CURRENT&export=download');
+      expect(previous).toBe('https://drive.usercontent.google.com/download?id=PREVIOUS&export=download');
+    });
+
+    it('should fall back to bookweb.org for previous week when previousDriveUrls has no matching region', () => {
+      const currentWed = new Date('2024-01-10T00:00:00');
+      const previousWed = new Date('2024-01-03T00:00:00');
+      const previousDriveUrls = {
+        SIBA: 'https://drive.usercontent.google.com/download?id=SIBA_PREV&export=download',
+      };
+
+      const { previous } = BestsellerParser.getListUrls(currentWed, previousWed, 'PNBA', {}, previousDriveUrls);
+
+      expect(previous).toContain('bookweb.org');
+      expect(previous).toContain('240103pn.txt');
+    });
+
+    it('should fall back to bookweb.org for previous week when previousDriveUrls is undefined', () => {
+      const currentWed = new Date('2024-01-10T00:00:00');
+      const previousWed = new Date('2024-01-03T00:00:00');
+
+      const { previous } = BestsellerParser.getListUrls(currentWed, previousWed, 'PNBA', {}, undefined);
+
+      expect(previous).toContain('bookweb.org');
+      expect(previous).toContain('240103pn.txt');
+    });
+  });
+
+  describe('getCachedDriveUrls', () => {
+    it('should return urls from fetch_cache when found', async () => {
+      const cachedData = {
+        urls: { PNBA: 'https://drive.usercontent.google.com/download?id=CACHED&export=download' },
+        weekEndDate: 'June 1, 2025',
+        scrapedAt: '2025-05-28T10:00:00Z',
+      };
+
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn(() => Promise.resolve({ data: { data: cachedData }, error: null })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.getCachedDriveUrls('2025-05-28');
+      expect(result).toEqual(cachedData.urls);
+    });
+
+    it('should return null when no cache entry exists', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.getCachedDriveUrls('2025-05-21');
+      expect(result).toBeNull();
+    });
+
+    it('should return null when Supabase returns an error', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: { message: 'error' } })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.getCachedDriveUrls('2025-05-28');
+      expect(result).toBeNull();
+    });
+
+    it('should return null when cached data has empty urls', async () => {
+      supabaseClientMock.from.mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: vi.fn(() => Promise.resolve({ data: { data: { urls: {} } }, error: null })),
+          })),
+        })),
+      });
+
+      const result = await BestsellerParser.getCachedDriveUrls('2025-05-28');
+      expect(result).toBeNull();
+    });
   });
 
   describe('edge cases', () => {

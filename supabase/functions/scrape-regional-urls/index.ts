@@ -10,6 +10,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +25,31 @@ const CALIBA_MAP: Record<string, string> = {
   "Northern CALIBA": "CALIBAN",
   "Southern CALIBA": "CALIBAS",
 };
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function wednesdayFromWeekEndDate(weekEndDateStr: string): string | null {
+  const match = weekEndDateStr.match(/(\w+)\s+(\d{1,2}),\s+(\d{4})/);
+  if (!match) return null;
+  const monthIndex = MONTH_NAMES.indexOf(match[1]);
+  if (monthIndex === -1) return null;
+  const date = new Date(
+    parseInt(match[3], 10),
+    monthIndex,
+    parseInt(match[2], 10),
+    12, 0, 0
+  );
+  const dow = date.getDay();
+  const diff = dow >= 3 ? dow - 3 : dow + 4;
+  date.setDate(date.getDate() - diff);
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const d = date.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 function mapTextToAbbreviation(text: string): string | null {
   for (const [label, abbr] of Object.entries(CALIBA_MAP)) {
@@ -85,6 +111,37 @@ serve(async (req: Request) => {
     console.log(
       `Scraped ${Object.keys(result.urls).length} Google Drive URLs, weekEndDate: ${result.weekEndDate}`
     );
+
+    // Persist Drive URLs to fetch_cache (non-fatal on failure)
+    if (result.weekEndDate && Object.keys(result.urls).length > 0) {
+      try {
+        const wednesday = wednesdayFromWeekEndDate(result.weekEndDate);
+        if (wednesday) {
+          const supabase = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+          );
+          const { error: cacheError } = await supabase.from("fetch_cache").upsert(
+            {
+              cache_key: `drive_urls_${wednesday}`,
+              data: {
+                urls: result.urls,
+                weekEndDate: result.weekEndDate,
+                scrapedAt: new Date().toISOString(),
+              },
+            },
+            { onConflict: "cache_key" }
+          );
+          if (cacheError) {
+            console.warn("Failed to cache Drive URLs:", cacheError.message);
+          } else {
+            console.log(`Cached Drive URLs as drive_urls_${wednesday}`);
+          }
+        }
+      } catch (cacheErr) {
+        console.warn("Drive URL caching error:", cacheErr);
+      }
+    }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -241,6 +241,27 @@ export class BestsellerParser {
   }
 
 
+  /**
+   * Look up cached Google Drive URLs for a specific Wednesday date from fetch_cache.
+   * Returns the urls record if found, or null.
+   */
+  static async getCachedDriveUrls(wednesdayDate: string): Promise<Record<string, string> | null> {
+    try {
+      const cacheKey = `drive_urls_${wednesdayDate}`;
+      const { data, error } = await supabase
+        .from('fetch_cache')
+        .select('data')
+        .eq('cache_key', cacheKey)
+        .maybeSingle();
+
+      if (error || !data?.data) return null;
+      const urls = (data.data as { urls?: Record<string, string> }).urls;
+      return urls && Object.keys(urls).length > 0 ? urls : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Cache for Google Drive URLs scraped from bookweb.org
   private static driveUrlsCache: { urls: Record<string, string>; fetchedAt: number } | null = null;
   private static readonly DRIVE_URLS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
@@ -435,8 +456,12 @@ export class BestsellerParser {
       // Discover Google Drive URLs for current week
       const driveUrls = await this.getGoogleDriveUrls();
 
+      // Look up cached Drive URLs for the previous/comparison week
+      const prevWedISO = previousWednesday.toISOString().split('T')[0];
+      const previousDriveUrls = await this.getCachedDriveUrls(prevWedISO);
+
       // Try to fetch current week first
-      const { current, previous } = this.getListUrls(currentWednesday, previousWednesday, region, driveUrls);
+      const { current, previous } = this.getListUrls(currentWednesday, previousWednesday, region, driveUrls, previousDriveUrls ?? undefined);
 
       logger.debug('BestsellerParser', 'Fetching URLs:', { current, previous });
       logger.debug('BestsellerParser', 'Starting parallel fetch with proxy fallbacks...');
@@ -474,60 +499,60 @@ export class BestsellerParser {
         );
       }
 
-      // If the latest data is missing or invalid, shift everything back by one week
+      // If the latest data is missing or invalid, shift "current" back one week.
+      // Keep the comparison week unchanged (fixes the old mutation bug that caused wrong dates).
       if (!currentHasContent) {
         logger.debug(
           'BestsellerParser',
           'Current week data not available, falling back to previous week'
         );
 
-        // TEMPORARILY DISABLED: Fallback logic causing date issues
-        // TODO: Re-enable once edge function validation is refined
-        throw new FetchError(
-          ErrorCode.DATA_FETCH_FAILED,
-          { resource: 'bestseller_data', operation: 'fetch', reason: 'current_week_unavailable' }
-        );
+        // New "current" = one week earlier (do NOT mutate the original dates)
+        const fallbackCurrentWed = new Date(currentWednesday);
+        fallbackCurrentWed.setDate(currentWednesday.getDate() - 7);
 
-        /* DISABLED FALLBACK LOGIC - causing Oct 19 date issue
-        // Use last week as "current" and two weeks ago as "previous"
-        currentWednesday.setDate(currentWednesday.getDate() - 7);
-        previousWednesday.setDate(previousWednesday.getDate() - 7);
+        let fallbackCurrentData: Record<string, unknown>;
+        let fallbackPreviousData: Record<string, unknown>;
+        let fallbackPreviousWed: Date;
 
-        const fallbackUrls = this.getListUrls(currentWednesday, previousWednesday, region);
+        if (comparisonWeek) {
+          // Custom comparison: previousData is the comparison date data (keep it).
+          // Need to fetch the fallback "current" (one week back).
+          const fallbackCurrentUrl = this.getListUrls(fallbackCurrentWed, previousWednesday, region).current;
+          fallbackCurrentData = await this.fetchWithCorsProxy(fallbackCurrentUrl);
+          fallbackPreviousData = previousData;
+          fallbackPreviousWed = previousWednesday;
+        } else {
+          // Default comparison: previousData is for currentWednesday − 7 (= fallback current).
+          // Need to fetch fallback "previous" (two weeks back).
+          fallbackCurrentData = previousData;
+          fallbackPreviousWed = new Date(fallbackCurrentWed);
+          fallbackPreviousWed.setDate(fallbackCurrentWed.getDate() - 7);
+          const fallbackPrevUrl = this.getListUrls(fallbackCurrentWed, fallbackPreviousWed, region).previous;
+          fallbackPreviousData = await this.fetchWithCorsProxy(fallbackPrevUrl);
+        }
 
-        const [fallbackCurrentData, fallbackPreviousData] = await Promise.all([
-          this.fetchWithCorsProxy(fallbackUrls.current),
-          this.fetchWithCorsProxy(fallbackUrls.previous)
-        ]);
-
-        if (!this.isValidBestsellerContent(fallbackCurrentData.contents) ||
-            !this.isValidBestsellerContent(fallbackPreviousData.contents)) {
+        if (!this.isValidBestsellerContent(fallbackCurrentData.contents as string) ||
+            !this.isValidBestsellerContent(fallbackPreviousData.contents as string)) {
           throw new FetchError(ErrorCode.DATA_FETCH_FAILED, { resource: 'bestseller_data', operation: 'fetch', reason: 'no_valid_data' });
         }
 
-        const currentList = this.parseList(fallbackCurrentData.contents);
-        const previousList = this.parseList(fallbackPreviousData.contents);
+        const currentList = this.parseList(fallbackCurrentData.contents as string);
+        const previousList = this.parseList(fallbackPreviousData.contents as string);
 
         logger.debug('Using fallback - Current list date:', currentList.date);
         logger.debug('Using fallback - Previous list date:', previousList.date);
 
-        // Save current list to database
-        await this.saveToDatabase(currentList, currentWednesday, region);
+        await this.saveToDatabase(currentList, fallbackCurrentWed, region);
 
-        // Save comparison week list to database if it's a custom week
         if (comparisonWeek) {
-          await this.saveToDatabase(previousList, previousWednesday, region);
+          await this.saveToDatabase(previousList, fallbackPreviousWed, region);
         }
 
         const comparedList = await this.compareLists(currentList, previousList, region);
-
         const result = { current: comparedList, previous: previousList };
-
-        // Cache the result with appropriate key
         await this.setCachedData(cacheKey, result);
-
         return result;
-        */
       }
 
       // Current week's data is available, use it normally
@@ -614,7 +639,7 @@ export class BestsellerParser {
     }
   }
 
-  static getListUrls(currentWednesday?: Date, previousWednesday?: Date, region: string = 'PNBA', driveUrls?: Record<string, string>) {
+  static getListUrls(currentWednesday?: Date, previousWednesday?: Date, region: string = 'PNBA', driveUrls?: Record<string, string>, previousDriveUrls?: Record<string, string>) {
     if (!currentWednesday) currentWednesday = DateUtils.getMostRecentWednesday();
     if (!previousWednesday) {
       previousWednesday = DateUtils.getPreviousWednesday();
@@ -626,10 +651,13 @@ export class BestsellerParser {
 
     const bookwebBase = 'https://www.bookweb.org/sites/default/files/regional_bestseller/';
 
-    // Use Google Drive URL for current week if available; always use bookweb.org for previous/historical
+    // Use Google Drive URL for current week if available
     const driveUrl = driveUrls?.[region];
     const current = driveUrl || `${bookwebBase}${DateUtils.formatAsYYMMDD(currentWednesday)}${fileCode}.txt`;
-    const previous = `${bookwebBase}${DateUtils.formatAsYYMMDD(previousWednesday)}${fileCode}.txt`;
+
+    // Use cached Drive URL for previous week if available; fall back to bookweb.org .txt
+    const prevDriveUrl = previousDriveUrls?.[region];
+    const previous = prevDriveUrl || `${bookwebBase}${DateUtils.formatAsYYMMDD(previousWednesday)}${fileCode}.txt`;
 
     return { current, previous };
   }

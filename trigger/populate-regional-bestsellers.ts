@@ -6,7 +6,7 @@ import {
   type PreviousWeekBook,
 } from "./feedGenerator";
 import { generateElsewhereFeeds } from "./generate-elsewhere-feeds";
-import { scrapeGoogleDriveUrls } from "./bookweb-scraper";
+import { scrapeGoogleDriveUrls, cacheDriveUrls } from "./bookweb-scraper";
 
 // Region configuration (sync with src/config/regions.ts)
 const REGIONS = [
@@ -264,6 +264,9 @@ export const populateRegionalBestsellers = schedules.task({
           regions: Object.keys(driveUrls),
           weekEndDate: scrapeResult.weekEndDate,
         });
+
+        // Persist Drive URLs to fetch_cache so they survive across weeks
+        await cacheDriveUrls(scrapeResult, supabase);
       } catch (error) {
         logger.warn("Failed to scrape Google Drive URLs, will use bookweb.org fallback", {
           error: String(error),
