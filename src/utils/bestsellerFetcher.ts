@@ -467,7 +467,15 @@ export class BestsellerParser {
 
       // Look up cached Drive URLs for the previous/comparison week
       const prevWedISO = previousWednesday.toISOString().split('T')[0];
-      const previousDriveUrls = await this.getCachedDriveUrls(prevWedISO);
+      let previousDriveUrls = await this.getCachedDriveUrls(prevWedISO);
+
+      // If cached previous Drive URLs are the same as current scrape for this region,
+      // discard them — both weeks would fetch identical data (no comparison possible).
+      // This happens when bookweb.org hasn't published the new week yet.
+      if (previousDriveUrls && driveUrls[region] && previousDriveUrls[region] === driveUrls[region]) {
+        logger.debug('BestsellerParser', 'Cached Drive URLs match current scrape — falling back to .txt for previous week');
+        previousDriveUrls = null;
+      }
 
       // Try to fetch current week first
       const { current, previous } = this.getListUrls(currentWednesday, previousWednesday, region, driveUrls, previousDriveUrls ?? undefined);
