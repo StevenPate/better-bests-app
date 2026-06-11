@@ -324,7 +324,16 @@ export class BestsellerParser {
           setTimeout(() => reject(new FetchError(ErrorCode.DATA_FETCH_FAILED, { resource: 'cors_proxy', proxy: proxy.split('?')[0], reason: 'timeout' })), timeout)
         );
 
-        const response = await Promise.race([fetch(proxyUrl), timeoutPromise]);
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const response = await Promise.race([
+          fetch(proxyUrl, {
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${anonKey}`,
+            },
+          }),
+          timeoutPromise,
+        ]);
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
