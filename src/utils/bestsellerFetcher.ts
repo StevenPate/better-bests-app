@@ -467,14 +467,23 @@ export class BestsellerParser {
 
       // Look up cached Drive URLs for the previous/comparison week
       const prevWedISO = previousWednesday.toISOString().split('T')[0];
-      let previousDriveUrls = await this.getCachedDriveUrls(prevWedISO);
+      const previousDriveUrls = await this.getCachedDriveUrls(prevWedISO);
 
-      // If cached previous Drive URLs are the same as current scrape for this region,
-      // discard them — both weeks would fetch identical data (no comparison possible).
-      // This happens when bookweb.org hasn't published the new week yet.
-      if (previousDriveUrls && driveUrls[region] && previousDriveUrls[region] === driveUrls[region]) {
-        logger.debug('BestsellerParser', 'Cached Drive URLs match current scrape — falling back to .txt for previous week');
-        previousDriveUrls = null;
+      // bookweb.org retired its .txt regional bestseller files around this date —
+      // anything published on/after returns 404 there. We must have a Google Drive
+      // URL or we have no source.
+      const BOOKWEB_TXT_RETIRED = new Date('2026-06-10T00:00:00');
+      if (currentWednesday >= BOOKWEB_TXT_RETIRED && !driveUrls[region]) {
+        throw new FetchError(
+          ErrorCode.DATA_FETCH_FAILED,
+          { resource: 'drive_urls', region, week: currentWednesday.toISOString().split('T')[0], reason: 'current_drive_url_missing' }
+        );
+      }
+      if (previousWednesday >= BOOKWEB_TXT_RETIRED && !previousDriveUrls?.[region]) {
+        throw new FetchError(
+          ErrorCode.DATA_FETCH_FAILED,
+          { resource: 'drive_urls', region, week: prevWedISO, reason: 'previous_drive_url_missing' }
+        );
       }
 
       // Try to fetch current week first
