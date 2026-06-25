@@ -5,29 +5,36 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fetchGoogleBooksCategory, fetchGoogleBooksCategoriesBatch, fetchCachedBookInfo, fetchGoogleBooksCoversBatch, fetchGoogleBooksPubDatesBatch, clearGoogleBooksCache, clearGoogleBooksInfoCache, clearGoogleBooksCoverCache, clearGoogleBooksPubDateCache } from './googleBooksApi';
 
+// Hoisted Supabase mocks so individual tests can assert against them
+const { mockInsert, mockSelect, mockDelete } = vi.hoisted(() => ({
+  mockInsert: vi.fn(() => ({
+    select: vi.fn(() => ({
+      single: vi.fn(() => Promise.resolve({ data: { id: 'test-id' }, error: null })),
+    })),
+  })),
+  mockSelect: vi.fn(() => ({
+    eq: vi.fn(() => ({
+      order: vi.fn(() => ({
+        limit: vi.fn(() => ({
+          maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
+        })),
+      })),
+    })),
+  })),
+  mockDelete: vi.fn(() => ({
+    eq: vi.fn(() => ({
+      neq: vi.fn(() => Promise.resolve({ error: null })),
+    })),
+  })),
+}));
+
 // Mock Supabase client
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          order: vi.fn(() => ({
-            limit: vi.fn(() => ({
-              maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
-            })),
-          })),
-        })),
-      })),
-      insert: vi.fn(() => ({
-        select: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: { id: 'test-id' }, error: null })),
-        })),
-      })),
-      delete: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          neq: vi.fn(() => Promise.resolve({ error: null })),
-        })),
-      })),
+      select: mockSelect,
+      insert: mockInsert,
+      delete: mockDelete,
     })),
   },
 }));
@@ -316,6 +323,39 @@ describe('fetchCachedBookInfo', () => {
 
     const result = await fetchCachedBookInfo('9780743273565');
     expect(result?.imageLinks?.thumbnail).toMatch(/^https:/);
+  });
+
+  it('does not persist _notFound to Supabase when the Google Books fetch fails (e.g., 429 quota, 5xx, network error)', async () => {
+    // Simulate a non-OK response (e.g. quota exhausted or upstream error).
+    // The catch block in fetchCachedBookInfo must not poison the persistent
+    // cache with _notFound — that would mask the book for 30 days even after
+    // the transient condition clears.
+    (global.fetch as any).mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const result = await fetchCachedBookInfo('9781250333902');
+
+    // In-session protection still returns _notFound so the caller falls through
+    expect(result._notFound).toBe(true);
+
+    // Persistent cache must NOT be written for transient failures
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('still persists _notFound when Google Books genuinely returns no results', async () => {
+    // Control case: a real "not found" (empty items) SHOULD still cache
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ items: [] }),
+    });
+
+    const result = await fetchCachedBookInfo('9999999999997');
+
+    expect(result._notFound).toBe(true);
+    expect(mockInsert).toHaveBeenCalled();
   });
 });
 

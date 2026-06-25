@@ -158,10 +158,11 @@ export const fetchCachedBookInfo = async (isbn: string): Promise<CachedBookInfo>
   } catch (error) {
     logger.error('Failed to fetch book info after retries', { isbn, error });
 
-    // Cache "not found" to avoid repeated failed requests
+    // Suppress retry storms within this session, but DO NOT persist to Supabase —
+    // a transient failure (429 quota, 5xx, network) would otherwise mask the book
+    // for the 30-day cache TTL even after the upstream condition clears.
     const notFoundInfo: CachedBookInfo = { _notFound: true };
     bookInfoCache.set(isbn, notFoundInfo);
-    await setSupabaseCachedBookInfo(isbn, notFoundInfo);
 
     return notFoundInfo;
   }
