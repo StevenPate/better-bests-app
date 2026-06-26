@@ -14,7 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { logger } from '@/lib/logger';
 import { RegionalHeatMap } from '@/components/BookChart';
 import { BookPerformanceMetrics } from '@/components/BookPerformanceMetrics';
-import { fetchCachedBookInfo, type CachedBookInfo } from '@/services/googleBooksApi';
+import { fetchBookMetadata } from '@/services/bookMetadata';
 
 interface BookCover {
   thumbnail?: string;
@@ -64,47 +64,8 @@ const BookDetail = () => {
   const { toast } = useToast();
   const { currentRegion } = useRegion();
 
-  const fetchBookCover = async (isbn: string): Promise<BookInfo | null> => {
-    try {
-      // Use cached Google Books data (three-tier cache: memory -> Supabase -> API)
-      const cachedInfo = await fetchCachedBookInfo(isbn);
-
-      if (!cachedInfo._notFound && cachedInfo.title) {
-        return {
-          title: cachedInfo.title || 'Unknown Title',
-          author: cachedInfo.authors?.join(', ') || 'Unknown Author',
-          publisher: cachedInfo.publisher,
-          publishedDate: cachedInfo.publishedDate,
-          description: cachedInfo.description,
-          pageCount: cachedInfo.pageCount,
-          categories: cachedInfo.categories,
-          imageLinks: cachedInfo.imageLinks,
-          industryIdentifiers: cachedInfo.industryIdentifiers
-        };
-      }
-
-      // Fallback: Try our database (distinct_books view)
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data: dbBook, error: dbError } = await supabase
-        .from('distinct_books')
-        .select('title, author, publisher')
-        .eq('isbn', isbn)
-        .single();
-
-      if (!dbError && dbBook) {
-        return {
-          title: dbBook.title || 'Unknown Title',
-          author: dbBook.author || 'Unknown Author',
-          publisher: dbBook.publisher,
-        };
-      }
-
-      return null;
-    } catch (error) {
-      logger.error('Error fetching book cover:', error);
-      return null;
-    }
-  };
+  const fetchBookCover = (isbn: string): Promise<BookInfo | null> =>
+    fetchBookMetadata(isbn, currentRegion.abbreviation);
 
   const fetchPositionHistory = async (isbn: string): Promise<PositionHistory[]> => {
     try {
