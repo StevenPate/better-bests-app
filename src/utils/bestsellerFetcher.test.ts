@@ -1159,4 +1159,65 @@ for the week ended Sunday, January 10, 2024
       expect(spy).toHaveBeenCalledWith(expect.stringContaining('PNBA'));
     });
   });
+
+  describe('buildPreviousListFromDb', () => {
+    const mockRegionalBestsellersQuery = (rows: unknown[] | null, error: unknown = null) => {
+      (supabaseClientMock.from as Mock).mockImplementationOnce((table: string) => {
+        if (table !== 'regional_bestsellers') throw new Error(`unexpected table ${table}`);
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ data: rows, error }),
+            }),
+          }),
+        };
+      });
+    };
+
+    it('returns null when no rows exist for the week', async () => {
+      mockRegionalBestsellersQuery([]);
+      const result = await BestsellerParser.buildPreviousListFromDb('PNBA', '2026-06-24');
+      expect(result).toBeNull();
+    });
+
+    it('returns null on query error', async () => {
+      mockRegionalBestsellersQuery(null, { message: 'boom' });
+      const result = await BestsellerParser.buildPreviousListFromDb('PNBA', '2026-06-24');
+      expect(result).toBeNull();
+    });
+
+    it('groups rows by category with formatted names and sorts books by rank', async () => {
+      mockRegionalBestsellersQuery([
+        { isbn: '9780063511637', title: 'Whistler', author: 'Ann Patchett', publisher: 'Harper', price: '$30.00', rank: 1, category: 'HARDCOVER FICTION', list_title: 'PNBA Independent Bestsellers' },
+        { isbn: '9780593320648', title: 'Land', author: "Maggie O'Farrell", publisher: 'Knopf', price: '$29.00', rank: 3, category: 'HARDCOVER FICTION', list_title: 'PNBA Independent Bestsellers' },
+        { isbn: '9780593804216', title: 'Yesteryear', author: 'Caro Claire Burke', publisher: 'Random House', price: '$28.00', rank: 2, category: 'HARDCOVER FICTION', list_title: 'PNBA Independent Bestsellers' },
+        { isbn: '9781234567890', title: 'Kid Book', author: 'A Kid', publisher: 'Kid Press', price: '$18.00', rank: 1, category: "CHILDREN'S ILLUSTRATED", list_title: 'PNBA Independent Bestsellers' },
+      ]);
+
+      const result = await BestsellerParser.buildPreviousListFromDb('PNBA', '2026-06-24');
+
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('PNBA Independent Bestsellers');
+      expect(result!.categories).toHaveLength(2);
+
+      const hcf = result!.categories.find(c => c.name === 'Hardcover Fiction');
+      expect(hcf).toBeDefined();
+      expect(hcf!.books.map(b => b.rank)).toEqual([1, 2, 3]);
+      expect(hcf!.books[0].isbn).toBe('9780063511637');
+      expect(hcf!.books[1].isbn).toBe('9780593804216');
+      expect(hcf!.books[2].isbn).toBe('9780593320648');
+
+      const kids = result!.categories.find(c => c.name === "Children's Illustrated");
+      expect(kids).toBeDefined();
+      expect(kids!.books).toHaveLength(1);
+    });
+
+    it('computes the Sunday list date as Wednesday minus 3', async () => {
+      mockRegionalBestsellersQuery([
+        { isbn: '9780063511637', title: 'X', author: 'Y', publisher: 'Z', price: '$1', rank: 1, category: 'HARDCOVER FICTION', list_title: 'T' },
+      ]);
+      const result = await BestsellerParser.buildPreviousListFromDb('PNBA', '2026-06-24');
+      expect(result!.date).toBe('Sunday, June 21, 2026');
+    });
+  });
 });

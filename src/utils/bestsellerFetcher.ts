@@ -1,10 +1,10 @@
-import { BestsellerList } from '@/types/bestseller';
+import { BestsellerBook, BestsellerCategory, BestsellerList } from '@/types/bestseller';
 import { supabase } from '@/integrations/supabase/client';
 import { DateUtils } from './dateUtils';
 import { logger } from '@/lib/logger';
 import { FetchError, ErrorCode, logError } from '@/lib/errors';
 import { getRegionByAbbreviation } from '@/config/regions';
-import { parseList } from './bestsellerTextParser';
+import { parseList, formatCategoryName } from './bestsellerTextParser';
 import { getCachedData, setCachedData, isCurrentWeek, shouldFetchNewData, isRecentCache } from './bestsellerCache';
 import {
   getDefaultAudience, ensureAudienceAssignment, batchGetBookAudiences,
@@ -262,6 +262,67 @@ export class BestsellerParser {
     }
   }
 
+  /**
+   * Rebuild a BestsellerList from regional_bestsellers rows. Used as the
+   * previous-week fallback when the Drive URL is missing or byte-identical to
+   * the current week's URL — bookweb.org reuses the same Drive file IDs each
+   * week and overwrites their contents, so historical Drive fetches return
+   * the current-week list, not the archived one. The Wednesday cron already
+   * persisted the correct rows to `regional_bestsellers` last week; this
+   * reads them back into the shape `compareLists` expects.
+   */
+  static async buildPreviousListFromDb(region: string, weekDate: string): Promise<BestsellerList | null> {
+    try {
+      const { data, error } = await supabase
+        .from('regional_bestsellers')
+        .select('isbn, title, author, publisher, price, rank, category, list_title')
+        .eq('region', region)
+        .eq('week_date', weekDate);
+
+      if (error || !data || (data as unknown[]).length === 0) return null;
+
+      const byCategory = new Map<string, BestsellerBook[]>();
+      const categoryOrder: string[] = [];
+      let listTitle = '';
+      for (const row of data as Array<Record<string, unknown>>) {
+        if (!listTitle && typeof row.list_title === 'string') listTitle = row.list_title;
+        const rawCategory = typeof row.category === 'string' ? row.category : '';
+        const name = formatCategoryName(rawCategory);
+        if (!byCategory.has(name)) {
+          byCategory.set(name, []);
+          categoryOrder.push(name);
+        }
+        byCategory.get(name)!.push({
+          rank: typeof row.rank === 'number' ? row.rank : 0,
+          title: typeof row.title === 'string' ? row.title : '',
+          author: typeof row.author === 'string' ? row.author : '',
+          publisher: typeof row.publisher === 'string' ? row.publisher : '',
+          price: typeof row.price === 'string' ? row.price : '',
+          isbn: typeof row.isbn === 'string' ? row.isbn : '',
+        });
+      }
+
+      const categories: BestsellerCategory[] = categoryOrder.map(name => ({
+        name,
+        books: byCategory.get(name)!.sort((a, b) => a.rank - b.rank),
+      }));
+
+      // Sunday list date = Wednesday publication - 3. Build in local time to
+      // avoid UTC day-shift on the Sunday boundary.
+      const [y, m, d] = weekDate.split('-').map(Number);
+      const sunday = new Date(y, m - 1, d);
+      sunday.setDate(sunday.getDate() - 3);
+      const dateStr = sunday.toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+
+      return { title: listTitle, date: dateStr, categories };
+    } catch (err) {
+      logger.warn('BestsellerParser', 'buildPreviousListFromDb failed', err);
+      return null;
+    }
+  }
+
   // Cache for Google Drive URLs scraped from bookweb.org
   private static driveUrlsCache: { urls: Record<string, string>; fetchedAt: number } | null = null;
   private static readonly DRIVE_URLS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
@@ -479,29 +540,55 @@ export class BestsellerParser {
           { resource: 'drive_urls', region, week: currentWednesday.toISOString().split('T')[0], reason: 'current_drive_url_missing' }
         );
       }
-      if (previousWednesday >= BOOKWEB_TXT_RETIRED && !previousDriveUrls?.[region]) {
-        throw new FetchError(
-          ErrorCode.DATA_FETCH_FAILED,
-          { resource: 'drive_urls', region, week: prevWedISO, reason: 'previous_drive_url_missing' }
+
+      // bookweb.org reuses the same Google Drive file IDs each week and just
+      // overwrites the contents, so the cached previous-week URL now points to
+      // this week's list. When the URL is missing OR identical to the current
+      // week's URL, Drive can't give us the previous week — fall back to the
+      // regional_bestsellers snapshot the Wednesday cron already persisted.
+      const previousDriveUrl = previousDriveUrls?.[region];
+      const previousUrlDuplicate = !!previousDriveUrl && previousDriveUrl === driveUrls[region];
+      let previousListFromDb: BestsellerList | null = null;
+      if (previousWednesday >= BOOKWEB_TXT_RETIRED && (!previousDriveUrl || previousUrlDuplicate)) {
+        previousListFromDb = await this.buildPreviousListFromDb(region, prevWedISO);
+        if (!previousListFromDb) {
+          throw new FetchError(
+            ErrorCode.DATA_FETCH_FAILED,
+            {
+              resource: 'drive_urls',
+              region,
+              week: prevWedISO,
+              reason: previousUrlDuplicate ? 'previous_drive_url_duplicate_no_db' : 'previous_drive_url_missing_no_db',
+            }
+          );
+        }
+        logger.debug(
+          'BestsellerParser',
+          `Using regional_bestsellers as previous-week source for ${region} ${prevWedISO}`,
+          { reason: previousUrlDuplicate ? 'duplicate_url' : 'missing_url' }
         );
       }
 
       // Try to fetch current week first
       const { current, previous } = this.getListUrls(currentWednesday, previousWednesday, region, driveUrls, previousDriveUrls ?? undefined);
 
-      logger.debug('BestsellerParser', 'Fetching URLs:', { current, previous });
+      logger.debug('BestsellerParser', 'Fetching URLs:', { current, previous: previousListFromDb ? '<from regional_bestsellers>' : previous });
       logger.debug('BestsellerParser', 'Starting parallel fetch with proxy fallbacks...');
 
       // Use CORS proxy with fallback support
       const [currentData, previousData] = await Promise.all([
         this.fetchWithCorsProxy(current),
-        this.fetchWithCorsProxy(previous)
+        previousListFromDb
+          ? Promise.resolve<Record<string, unknown> | null>(null)
+          : this.fetchWithCorsProxy(previous)
       ]);
       logger.debug('BestsellerParser', 'Fetch completed successfully');
 
       // Check if current week's data is actually available (not a 404 page)
   const currentHasContent = this.isValidBestsellerContent(currentData.contents);
-  const previousHasContent = this.isValidBestsellerContent(previousData.contents);
+  const previousHasContent = previousListFromDb
+    ? true
+    : this.isValidBestsellerContent((previousData as { contents?: string } | null)?.contents);
 
       if (!currentHasContent) {
         logger.warn(
@@ -528,6 +615,16 @@ export class BestsellerParser {
       // If the latest data is missing or invalid, shift "current" back one week.
       // Keep the comparison week unchanged (fixes the old mutation bug that caused wrong dates).
       if (!currentHasContent) {
+        // The shift-back path needs a raw previous-week file to promote into
+        // the new "current" slot. If previousList came from the DB fallback we
+        // don't have that raw content, so bail out with a clear error.
+        if (previousListFromDb) {
+          throw new FetchError(
+            ErrorCode.DATA_FETCH_FAILED,
+            { resource: 'bestseller_data', operation: 'fetch', reason: 'current_invalid_with_db_previous' }
+          );
+        }
+
         logger.debug(
           'BestsellerParser',
           'Current week data not available, falling back to previous week'
@@ -546,12 +643,12 @@ export class BestsellerParser {
           // Need to fetch the fallback "current" (one week back).
           const fallbackCurrentUrl = this.getListUrls(fallbackCurrentWed, previousWednesday, region).current;
           fallbackCurrentData = await this.fetchWithCorsProxy(fallbackCurrentUrl);
-          fallbackPreviousData = previousData;
+          fallbackPreviousData = previousData as Record<string, unknown>;
           fallbackPreviousWed = previousWednesday;
         } else {
           // Default comparison: previousData is for currentWednesday − 7 (= fallback current).
           // Need to fetch fallback "previous" (two weeks back).
-          fallbackCurrentData = previousData;
+          fallbackCurrentData = previousData as Record<string, unknown>;
           fallbackPreviousWed = new Date(fallbackCurrentWed);
           fallbackPreviousWed.setDate(fallbackCurrentWed.getDate() - 7);
           const fallbackPrevUrl = this.getListUrls(fallbackCurrentWed, fallbackPreviousWed, region).previous;
@@ -583,7 +680,8 @@ export class BestsellerParser {
 
       // Current week's data is available, use it normally
       const currentList = this.parseList(currentData.contents);
-      const previousList = this.parseList(previousData.contents);
+      const previousList = previousListFromDb
+        ?? this.parseList((previousData as { contents: string }).contents);
 
       logger.debug('Parsed current list date:', currentList.date);
       logger.debug('Parsed previous list date:', previousList.date);
@@ -591,8 +689,10 @@ export class BestsellerParser {
       // Save current list to database
       await this.saveToDatabase(currentList, currentWednesday, region);
 
-      // Save comparison week list to database if it's a custom week
-      if (comparisonWeek) {
+      // Save comparison week list to database if it's a custom week AND we
+      // fetched it fresh — skip when previousList was rebuilt from the DB
+      // (already persisted; re-writing would just duplicate edge-function work).
+      if (comparisonWeek && !previousListFromDb) {
         await this.saveToDatabase(previousList, previousWednesday, region);
       }
 
