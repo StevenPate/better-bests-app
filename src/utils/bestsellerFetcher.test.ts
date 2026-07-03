@@ -1160,6 +1160,27 @@ for the week ended Sunday, January 10, 2024
     });
   });
 
+  describe('normalizeToWednesdayISO', () => {
+    it('returns the same Wednesday when input is already Wednesday', () => {
+      expect(BestsellerParser.normalizeToWednesdayISO('2026-06-24')).toBe('2026-06-24');
+    });
+
+    it('shifts Sunday input forward to the Wednesday of the same week', () => {
+      // 2026-06-21 is Sunday; the Wednesday of the same week is 2026-06-24
+      expect(BestsellerParser.normalizeToWednesdayISO('2026-06-21')).toBe('2026-06-24');
+    });
+
+    it('shifts Thursday-Saturday forward to the following Wednesday', () => {
+      // 2026-06-25 (Thu) → 2026-07-01 (next Wed)
+      expect(BestsellerParser.normalizeToWednesdayISO('2026-06-25')).toBe('2026-07-01');
+    });
+
+    it('handles month rollover', () => {
+      // 2026-06-28 (Sun) → 2026-07-01 (Wed)
+      expect(BestsellerParser.normalizeToWednesdayISO('2026-06-28')).toBe('2026-07-01');
+    });
+  });
+
   describe('buildPreviousListFromDb', () => {
     const mockRegionalBestsellersQuery = (rows: unknown[] | null, error: unknown = null) => {
       (supabaseClientMock.from as Mock).mockImplementationOnce((table: string) => {

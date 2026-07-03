@@ -459,6 +459,26 @@ export class BestsellerParser {
     return true;
   }
 
+  /**
+   * Normalize a YYYY-MM-DD date string to the Wednesday of that week.
+   * PNBA files are published on Wednesday, 3 days after the Sunday list date;
+   * callers pass either the Sunday (Region page dropdown) or the Wednesday
+   * (Diagnostics buttons). Collapsing to a single canonical date keeps both
+   * paths on the same cache key so the two pages don't populate parallel
+   * caches with the same data.
+   */
+  static normalizeToWednesdayISO(dateStr: string): string {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const base = new Date(year, month - 1, day);
+    const dayOfWeek = base.getDay(); // 0=Sun ... 3=Wed ... 6=Sat
+    const daysToAdd = dayOfWeek <= 3 ? 3 - dayOfWeek : 10 - dayOfWeek;
+    base.setDate(base.getDate() + daysToAdd);
+    const y = base.getFullYear();
+    const m = (base.getMonth() + 1).toString().padStart(2, '0');
+    const d = base.getDate().toString().padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   // Main fetch method with caching
   static async fetchBestsellerData(options?: { refresh?: boolean; comparisonWeek?: string; region?: string }): Promise<{ current: BestsellerList; previous: BestsellerList } | null> {
     logger.debug('BestsellerParser', 'fetchBestsellerData called with options:', options);
@@ -466,10 +486,10 @@ export class BestsellerParser {
     const comparisonWeek = options?.comparisonWeek;
     const region = options?.region || 'PNBA'; // Default to PNBA
 
-    // Determine cache key based on comparison week AND region
-    // Add version suffix to force cache invalidation after RPC function change
+    // Cache key uses the Wednesday of the requested week so Sunday-input
+    // (Region page) and Wednesday-input (Diagnostics) callers share entries.
     const cacheKey = comparisonWeek
-      ? `${region}_bestseller_list_vs_${comparisonWeek}_v2`
+      ? `${region}_bestseller_list_vs_${this.normalizeToWednesdayISO(comparisonWeek)}_v2`
       : `${region}_current_bestseller_list_v2`;
     logger.debug('BestsellerParser', 'Cache key:', cacheKey);
 
@@ -501,24 +521,9 @@ export class BestsellerParser {
       // Use custom comparison week if provided
       if (comparisonWeek) {
         logger.debug('BestsellerParser', 'Using custom comparison week:', comparisonWeek);
-        // Create date in local timezone to avoid UTC conversion issues
-        const [year, month, day] = comparisonWeek.split('-').map(Number);
-        const base = new Date(year, month - 1, day); // month is 0-indexed
-
-        // Normalize to that week's Wednesday (files are named by Wednesday)
-        // PNBA files are published on Wednesday, 3 days after the Sunday list date
-        const dayOfWeek = base.getDay(); // 0=Sun ... 3=Wed
-        let daysToAdd: number;
-        if (dayOfWeek <= 3) {
-          // Sun-Wed: Find Wednesday in the same week
-          daysToAdd = 3 - dayOfWeek;
-        } else {
-          // Thu-Sat: Find Wednesday in the following week
-          daysToAdd = 10 - dayOfWeek;
-        }
-        previousWednesday = new Date(base);
-        previousWednesday.setDate(base.getDate() + daysToAdd);
-        previousWednesday.setHours(0, 0, 0, 0);
+        const normalized = this.normalizeToWednesdayISO(comparisonWeek);
+        const [ny, nm, nd] = normalized.split('-').map(Number);
+        previousWednesday = new Date(ny, nm - 1, nd, 12, 0, 0);
       } else {
         previousWednesday.setDate(currentWednesday.getDate() - 7);
       }
