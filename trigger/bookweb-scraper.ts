@@ -93,13 +93,13 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Convert a week-end date string like "June 7, 2026" (typically a Sunday)
+ * Convert a week-end date string like "June 7, 2026" (always a Sunday)
  * to the corresponding Wednesday publication date as "YYYY-MM-DD".
  *
  * The bookweb.org page shows "Sales Week Ended Sunday, June 7, 2026".
- * Bestseller files are published on Wednesday, which is 3 days before the
- * following Sunday — i.e. the Wednesday of the same ISO week. We subtract
- * (day-of-week + 4) % 7 days to land on Wednesday regardless of the input day.
+ * Lists are published the Wednesday AFTER that Sunday (Sunday + 3) —
+ * the same convention the frontend's normalizeToWednesdayISO and all
+ * drive_urls_/comparison cache keys use. A Wednesday input maps to itself.
  */
 export function wednesdayFromWeekEndDate(weekEndDateStr: string): string {
   const match = weekEndDateStr.match(/(\w+)\s+(\d{1,2}),\s+(\d{4})/);
@@ -114,10 +114,10 @@ export function wednesdayFromWeekEndDate(weekEndDateStr: string): string {
   // Build date in local time (noon to avoid DST edge cases)
   const date = new Date(year, monthIndex, day, 12, 0, 0);
 
-  // Move to the most recent Wednesday (day 3)
+  // Move forward to the Wednesday of the publication week (Sun→+3, Wed→+0)
   const dow = date.getDay(); // 0=Sun
-  const diff = dow >= 3 ? dow - 3 : dow + 4;
-  date.setDate(date.getDate() - diff);
+  const diff = dow <= 3 ? 3 - dow : 10 - dow;
+  date.setDate(date.getDate() + diff);
 
   const y = date.getFullYear();
   const m = (date.getMonth() + 1).toString().padStart(2, "0");

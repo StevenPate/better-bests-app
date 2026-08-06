@@ -141,14 +141,22 @@ describe("parseGoogleDriveUrls", () => {
 });
 
 describe("wednesdayFromWeekEndDate", () => {
-  it("should convert a Sunday week-end date to the preceding Wednesday", () => {
-    // Sunday June 1, 2025 → Wednesday May 28, 2025
-    expect(wednesdayFromWeekEndDate("June 1, 2025")).toBe("2025-05-28");
+  // Lists are PUBLISHED the Wednesday AFTER the Sunday the sales week ends:
+  // Sunday list date + 3 = publication Wednesday. This matches the frontend's
+  // normalizeToWednesdayISO and the drive_urls_/comparison cache keys.
+  it("should convert a Sunday week-end date to the following publication Wednesday", () => {
+    // Sunday June 1, 2025 → Wednesday June 4, 2025
+    expect(wednesdayFromWeekEndDate("June 1, 2025")).toBe("2025-06-04");
   });
 
-  it("should handle a Sunday at the start of a month", () => {
-    // Sunday June 7, 2026 → Wednesday June 3, 2026
-    expect(wednesdayFromWeekEndDate("June 7, 2026")).toBe("2026-06-03");
+  it("should convert a Sunday near end of month across the month boundary", () => {
+    // Sunday June 28, 2026 → Wednesday July 1, 2026
+    expect(wednesdayFromWeekEndDate("June 28, 2026")).toBe("2026-07-01");
+  });
+
+  it("should convert the real 2026-08-05 case", () => {
+    // Sunday July 26, 2026 → Wednesday July 29, 2026 (NOT July 22)
+    expect(wednesdayFromWeekEndDate("July 26, 2026")).toBe("2026-07-29");
   });
 
   it("should handle a Wednesday input (returns same day)", () => {
@@ -157,8 +165,8 @@ describe("wednesdayFromWeekEndDate", () => {
   });
 
   it("should handle year boundaries", () => {
-    // Sunday January 4, 2026 → Wednesday December 31, 2025
-    expect(wednesdayFromWeekEndDate("January 4, 2026")).toBe("2025-12-31");
+    // Sunday December 28, 2025 → Wednesday December 31, 2025
+    expect(wednesdayFromWeekEndDate("December 28, 2025")).toBe("2025-12-31");
   });
 
   it("should throw on unparseable input", () => {

@@ -6,8 +6,8 @@ import {
   type PreviousWeekBook,
 } from "./feedGenerator";
 import { generateElsewhereFeeds } from "./generate-elsewhere-feeds";
-import { scrapeGoogleDriveUrls, cacheDriveUrls } from "./bookweb-scraper";
-import { parseRegionalList as parseRegionalListShared, type RegionalBook as SharedRegionalBook } from "./parseRegionalList";
+import { scrapeGoogleDriveUrls, cacheDriveUrls, wednesdayFromWeekEndDate } from "./bookweb-scraper";
+import { parseRegionalList as parseRegionalListShared, extractWeekEndDate, type RegionalBook as SharedRegionalBook } from "./parseRegionalList";
 
 // Region configuration (sync with src/config/regions.ts)
 const REGIONS = [
@@ -65,6 +65,50 @@ function parseRegionalList(
   }));
 }
 
+/**
+ * Verify the fetched content actually covers the week we intend to store it
+ * under. bookweb.org updates its files at varying times on Wednesday; an
+ * early fetch returns LAST week's list, and labeling it with today's date
+ * silently shifts the whole dataset by a week (diagnosed 2026-08-05).
+ * Content that self-labels a different week is rejected so a later cron run
+ * can pick up the real list once bookweb publishes it.
+ */
+function contentMatchesWeek(
+  content: string,
+  region: string,
+  expectedISO: string
+): boolean {
+  const weekEndDate = extractWeekEndDate(content);
+  if (!weekEndDate) {
+    logger.error(
+      `No week-end date found in ${region} content — refusing to ingest unverifiable list`,
+      { expectedWeek: expectedISO, sample: content.slice(0, 200) }
+    );
+    return false;
+  }
+
+  let contentWeekISO: string;
+  try {
+    contentWeekISO = wednesdayFromWeekEndDate(weekEndDate);
+  } catch (error) {
+    logger.error(`Unparseable week-end date in ${region} content`, {
+      weekEndDate,
+      error: String(error),
+    });
+    return false;
+  }
+
+  if (contentWeekISO !== expectedISO) {
+    logger.warn(
+      `${region} content is for week ${contentWeekISO}, expected ${expectedISO} — bookweb not updated yet, will retry on a later run`,
+      { weekEndDate }
+    );
+    return false;
+  }
+
+  return true;
+}
+
 async function fetchRegionalList(
   region: { abbreviation: string; file_code: string },
   weekDate: Date,
@@ -81,12 +125,18 @@ async function fetchRegionalList(
       const response = await fetch(driveUrl);
       if (response.ok) {
         const content = await response.text();
-        const books = parseRegionalList(content, region.abbreviation, isoDate);
-        if (books.length > 0) {
-          logger.info(`Parsed ${region.abbreviation} from Google Drive`, { bookCount: books.length });
-          return books;
+        if (contentMatchesWeek(content, region.abbreviation, isoDate)) {
+          const books = parseRegionalList(content, region.abbreviation, isoDate);
+          if (books.length > 0) {
+            logger.info(`Parsed ${region.abbreviation} from Google Drive`, { bookCount: books.length });
+            return books;
+          }
+          logger.warn(`Google Drive file for ${region.abbreviation} parsed 0 books, falling back to bookweb.org`);
+        } else {
+          // Stale week on Drive means bookweb hasn't published yet; the .txt
+          // fallback would be equally stale, so skip this region for now.
+          return [];
         }
-        logger.warn(`Google Drive file for ${region.abbreviation} parsed 0 books, falling back to bookweb.org`);
       } else {
         logger.warn(`Google Drive fetch failed for ${region.abbreviation}`, { status: response.status });
       }
@@ -109,6 +159,9 @@ async function fetchRegionalList(
   }
 
   const content = await response.text();
+  if (!contentMatchesWeek(content, region.abbreviation, isoDate)) {
+    return [];
+  }
   const books = parseRegionalList(content, region.abbreviation, isoDate);
 
   logger.info(`Parsed ${region.abbreviation}`, { bookCount: books.length });
@@ -125,7 +178,11 @@ const BATCH_SIZE = 1000;
 
 export const populateRegionalBestsellers = schedules.task({
   id: "populate-regional-bestsellers",
-  cron: { pattern: "*/20 8-10 * * 3", timezone: "America/Los_Angeles" },
+  // bookweb.org publishes the new week at varying times on Wednesday — on
+  // 2026-08-05 the Drive files updated ~10:30am PT and the page ~12:30pm PT.
+  // Runs before the update are cheap no-ops: contentMatchesWeek rejects the
+  // stale list and the region stays in missingRegions for the next slot.
+  cron: { pattern: "*/20 8-14 * * 3", timezone: "America/Los_Angeles" },
   run: async () => {
     const supabase = createClient(
       process.env.SUPABASE_URL!,

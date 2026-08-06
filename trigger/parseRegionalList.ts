@@ -14,6 +14,22 @@ function normalizeIsbn(isbn: string): string {
   return isbn.replace(/[-\s]/g, "");
 }
 
+/**
+ * Extract the sales-week-end date from regional list content.
+ *
+ * Regional .txt files open with "...for the week ended Sunday, June 21, 2026."
+ * and the bookweb.org page uses "Sales Week Ended Sunday, July 26, 2026" —
+ * both share the "week ended <weekday>, <Month D, YYYY>" core. This is the
+ * list's own claim about which week it covers; ingestion must trust it over
+ * the clock, since bookweb publishes new lists at varying times on Wednesday.
+ */
+export function extractWeekEndDate(content: string): string | null {
+  const match = content.match(
+    /week\s+ended\s+\w+,\s+(\w+\s+\d{1,2},\s+\d{4})/i
+  );
+  return match ? match[1] : null;
+}
+
 export function parseRegionalList(
   content: string,
   region: string,

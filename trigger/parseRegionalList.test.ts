@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parseRegionalList } from "./parseRegionalList";
+import { parseRegionalList, extractWeekEndDate } from "./parseRegionalList";
 
 const FIXTURE = readFileSync(
   path.join(__dirname, "__fixtures__/pnba-2026-06-24.txt"),
@@ -46,5 +46,21 @@ describe("parseRegionalList", () => {
     for (const [cat, n] of Object.entries(counts)) {
       expect(n, `category ${cat} has ${n} books, expected <= 15`).toBeLessThanOrEqual(15);
     }
+  });
+});
+
+describe("extractWeekEndDate", () => {
+  it("extracts the week-end date from a PNBA regional file header", () => {
+    // Header: "...for the week ended Sunday, June 21, 2026."
+    expect(extractWeekEndDate(FIXTURE)).toBe("June 21, 2026");
+  });
+
+  it("extracts the date from the bookweb page-style 'Sales Week Ended' phrasing", () => {
+    const content = "Sales Week Ended Sunday, July 26, 2026";
+    expect(extractWeekEndDate(content)).toBe("July 26, 2026");
+  });
+
+  it("returns null when no week-end date is present", () => {
+    expect(extractWeekEndDate("HARDCOVER FICTION\n1. Some Book\nAuthor, Pub, $30.00, 9780593804216")).toBeNull();
   });
 });
