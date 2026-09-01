@@ -1745,9 +1745,55 @@ git commit -m "feat(ui): read ABA-supplied rank and weeks-on-list from the datab
 
 ---
 
-### Task 5.2: Delete the dead fetch layer
+### Task 5.2: Rescue `batchGetBookAudiences` before deleting anything
 
-Do this **after** 5.1 is green, so deletion is a separate, revertible commit.
+`src/utils/bestsellerFetcher.ts` is being deleted, but it also contains
+`batchGetBookAudiences`, which has **nothing to do with ABA fetching** and is
+imported by four surviving modules:
+
+- `src/hooks/useBookAudiences.ts`
+- `src/hooks/useAudiencesByIsbn.ts`
+- `src/services/bookDataService.ts`
+
+Deleting the file without moving this function first will break the build in a
+way that looks like an unrelated failure.
+
+**Files:**
+- Modify: `src/services/bookDataService.ts` (destination)
+- Modify: the two hooks above (update imports)
+
+**Step 1: Move the function**
+
+Cut `batchGetBookAudiences` out of `bestsellerFetcher.ts` into
+`src/services/bookDataService.ts`, which already owns book-metadata concerns.
+Bring its existing tests with it.
+
+**Step 2: Update the importers**
+
+```bash
+grep -rn "batchGetBookAudiences" src
+```
+
+Point every import at `src/services/bookDataService.ts`.
+
+**Step 3: Verify**
+
+Run: `npx vitest --run src/ && npm run build`
+Expected: both pass, with `bestsellerFetcher.ts` still present.
+
+**Step 4: Commit**
+
+```bash
+git add src/
+git commit -m "refactor: move batchGetBookAudiences out of the doomed fetch layer"
+```
+
+---
+
+### Task 5.3: Delete the dead fetch layer
+
+Do this **after** 5.1 and 5.2 are green, so deletion is a separate, revertible
+commit.
 
 **Files:**
 - Delete: `src/utils/bestsellerFetcher.ts`, `src/utils/bestsellerFetcher.test.ts`
