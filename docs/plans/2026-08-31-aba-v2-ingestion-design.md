@@ -57,7 +57,7 @@ internally consistent and can be trusted as a historical record.
 | Decision | Choice | Rationale |
 |---|---|---|
 | Source of truth | **Google Sheets** via `abaorg.link` | Already columnar; deletes the parser layer instead of rewriting it. No Cloudflare. |
-| Export format | **xlsx for tab names, gviz CSV for data** | The plain CSV export returns only the first tab; the gviz endpoint serves any tab by name as clean typed CSV (string ISBNs, `$` prices) but silently returns the FIRST tab for an unknown name. So: enumerate tabs from the xlsx `workbook.xml` (detects renames), then request only confirmed names via gviz. |
+| Export format | **xlsx only** (revised 2026-09-01) | gviz was tried and rejected: it silently serves the FIRST tab for `Childrens Series` and `Childrens Series TItles` with no detectable error, even though both tabs exist. The xlsx is the only source where tab→data correspondence is structural. ISBN floats are formatted+validated; prices reformatted to `"$n.nn"`. One request per region-week. |
 | Client-side live fetch | **Delete** | Browser reads `regional_bestsellers` and generated feeds only. |
 | Region codes | **Map at ingest boundary** | `nciba→CALIBAN`, `sciba→CALIBAS`. Zero migration risk to ~8k historical rows. A real migration with aliases follows later — see Deferred. |
 | `Last Week` / `Weeks on List` | **Store; ABA authoritative** | Retires previous-week fetching and DB-appearance counting. |
@@ -79,8 +79,7 @@ Trigger.dev cron (Wednesday, polling)
   └─ for each of 9 regions:
        resolve  abaorg.link/{slug}-bestsellers-sheet-{YYYY-MM-DD}  → Sheet ID
        persist  Sheet ID into fetch_cache          (survives shortener retirement)
-       fetch    {id}/export?format=xlsx            (tab names only)
-       fetch    {id}/gviz/tq?tqx=out:csv&sheet=…   (per-tab data, typed CSV)
+       fetch    {id}/export?format=xlsx   (one file: tab names + all cell data)
        VALIDATE Report Details region + serial date == requested
        map      tab name → DB category, slug → DB region code
        replace  regional_bestsellers region-week (delete + insert, hash-gated)

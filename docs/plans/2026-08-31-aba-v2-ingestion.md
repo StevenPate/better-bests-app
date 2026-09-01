@@ -210,6 +210,29 @@ git commit -m "feat(db): add last_week_rank and weeks_on_list to regional_bestse
 
 ## Phase 2: The source client
 
+> **AMENDMENT 2026-09-01, discovered during Task 0.2:** the gviz CSV endpoint
+> cannot serve the tabs `Childrens Series` and `Childrens Series TItles` — it
+> silently returns the FIRST tab's data for both, with `"status":"ok"` even in
+> JSON mode, so the failure is undetectable at request time. Sequential gids do
+> not exist (only `gid=0`). Therefore **all cell data is parsed from the xlsx
+> workbook itself**, where tab→data correspondence is structural
+> (`workbook.xml` name → rels → `sheetN.xml`) and cannot mismatch; gviz is not
+> used at all. Consequences for the tasks below:
+>
+> - Task 2.3 (CSV parser) is **dropped** — there is no CSV anywhere.
+> - Task 2.4 reads rows from parsed xlsx cells: ISBNs arrive as floats and are
+>   formatted with `toFixed(0)` then validated against `/^97[89]\d{10}$/`;
+>   prices arrive as numbers and are formatted `"$" + n.toFixed(2)` to match
+>   the DB's stored format.
+> - Task 2.5 reads Report Details from xlsx cells; the date is an Excel serial.
+> - Task 2.6 downloads exactly one file per region-week (the xlsx) — simpler
+>   and fewer requests than the planned 13.
+> - The fixture is the full workbook `pnba-2026-08-26.xlsx`; the gviz CSV
+>   fixtures were removed.
+>
+> The implemented code is the authority for Phase 2 specifics; the task text
+> below is kept for the record but describes the pre-amendment design.
+
 ### Task 2.1: Region and category maps
 
 Pure data plus lookup functions. No I/O, so it is trivially testable.
