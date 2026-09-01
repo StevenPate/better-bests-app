@@ -1,16 +1,16 @@
 /** ABA's URL slug for each region, paired with the code our DB already uses. */
 export const REGION_SLUGS = [
-  { slug: "gliba", db: "GLIBA" },
-  { slug: "miba", db: "MIBA" },
-  { slug: "mpiba", db: "MPIBA" },
-  { slug: "naiba", db: "NAIBA" },
-  { slug: "neiba", db: "NEIBA" },
-  { slug: "pnba", db: "PNBA" },
-  { slug: "siba", db: "SIBA" },
+  { slug: "gliba", db: "GLIBA", full_name: "Great Lakes Independent Booksellers Association" },
+  { slug: "miba", db: "MIBA", full_name: "Midwest Independent Booksellers Association" },
+  { slug: "mpiba", db: "MPIBA", full_name: "Mountains & Plains Independent Booksellers Association" },
+  { slug: "naiba", db: "NAIBA", full_name: "New Atlantic Independent Booksellers Association" },
+  { slug: "neiba", db: "NEIBA", full_name: "New England Independent Booksellers Association" },
+  { slug: "pnba", db: "PNBA", full_name: "Pacific Northwest Booksellers Association" },
+  { slug: "siba", db: "SIBA", full_name: "Southern Independent Booksellers Alliance" },
   // ABA renamed the California regions. We keep the legacy DB codes and
   // translate here; a real migration is deferred. See the design doc.
-  { slug: "nciba", db: "CALIBAN" },
-  { slug: "sciba", db: "CALIBAS" },
+  { slug: "nciba", db: "CALIBAN", full_name: "California Independent Booksellers Alliance (North)" },
+  { slug: "sciba", db: "CALIBAS", full_name: "California Independent Booksellers Alliance (South)" },
 ] as const;
 
 export function dbRegionForSlug(slug: string): string | null {
