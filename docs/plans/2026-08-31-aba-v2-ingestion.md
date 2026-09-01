@@ -4,7 +4,7 @@
 
 **Goal:** Replace the dead bookweb.org `.txt`/Drive scraping pipeline with ingestion from ABA's new IndieBound v2 Google Sheets, backfill the resulting data gaps, and audit the existing history against the new archive.
 
-**Architecture:** A Trigger.dev task resolves `abaorg.link/{slug}-bestsellers-sheet-{date}` to a Google Sheet ID, enumerates the workbook's tab names from its xlsx `workbook.xml` (to detect renames), then fetches each mapped tab as clean CSV via the `gviz` endpoint. Rows upsert idempotently into `regional_bestsellers`. The browser stops fetching ABA entirely and reads only stored data.
+**Architecture:** A Trigger.dev task resolves `abaorg.link/{slug}-bestsellers-sheet-{date}` to a Google Sheet ID, enumerates the workbook's tab names from its xlsx `workbook.xml` (to detect renames), then fetches each mapped tab as clean CSV via the `gviz` endpoint. Region-weeks are replaced atomically on content change (delete + insert, hash-gated). The browser stops fetching ABA entirely and reads only stored data.
 
 **Tech Stack:** Trigger.dev v4 (`@trigger.dev/sdk`), Supabase (Postgres + Edge Functions), Vite/React/TypeScript, Vitest, `fflate` (zip reading only)
 
@@ -132,6 +132,23 @@ cat trigger/__fixtures__/aba-v2/pnba-2026-08-26-report-details.csv
 
 Expected: the first shows a quoted header row starting `"Rank","ISBN","Title"`.
 The second shows `"PNBA Bestsellers"` then `"08/26/2026"`.
+
+**Step 3b: Report Details label format — already verified for all 9 regions**
+
+The validation in Task 2.5 assumes every region's label is exactly
+`"{SLUG} Bestsellers"`. This was checked against the live sheets for all nine
+regions on 2026-08-31 and holds (`GLIBA Bestsellers`, `NCIBA Bestsellers`,
+`SCIBA Bestsellers`, …). If ABA ever changes the label format the check fails
+loudly, which is the intended behavior. To re-verify:
+
+```bash
+for r in gliba miba mpiba naiba nciba neiba pnba sciba siba; do
+  id=$(curl -s -o /dev/null -w "%{url_effective}" -L \
+    "https://abaorg.link/$r-bestsellers-sheet-2026-08-26" \
+    | grep -oE "/d/[^/]+" | cut -d/ -f3)
+  curl -s -L "https://docs.google.com/spreadsheets/d/$id/gviz/tq?tqx=out:csv&sheet=Report%20Details" | head -1
+done
+```
 
 **Step 4: Commit**
 
@@ -1118,7 +1135,7 @@ git commit -m "feat(aba): add sheet resolution and tab fetching client"
 
 ## Phase 3: The ingest task
 
-### Task 3.1: Idempotent upsert with content hashing
+### Task 3.1: Row flattening and content hashing
 
 **Files:**
 - Create: `trigger/aba/persist.ts`
@@ -1256,7 +1273,7 @@ export function contentHash(week: RegionWeek): string {
         r.category, r.rank, r.isbn, r.title, r.author,
         r.publisher ?? "", r.price ?? "",
         r.last_week_rank ?? "", r.weeks_on_list ?? "",
-      ].join("")
+      ].join("|") // delimited so ("CAT",11) and ("CAT1",1) cannot collide
     )
     .sort()
     .join("\n");
@@ -1278,7 +1295,7 @@ git commit -m "feat(aba): add row flattening and content hashing"
 
 ---
 
-### Task 3.2: Add the upsert constraint
+### Task 3.2: Add the uniqueness safety net
 
 The upsert needs a unique index to conflict on.
 
@@ -1326,6 +1343,18 @@ git commit -m "feat(db): add unique index for idempotent bestseller upserts"
 
 ### Task 3.3: The ingest task itself
 
+Two persistence rules matter here, both learned the hard way:
+
+1. **Replace, never merge.** When content changes we delete the region-week's
+   rows and insert fresh, inside one transaction-ish sequence. A plain upsert
+   would leave ghosts: a mid-week correction that shrinks a category from 15
+   to 14 entries would keep the stale rank-15 row, and backfilling the
+   PNBA-only weeks (whose existing rows use the old parser's category labels)
+   would duplicate books under two category names. The unique index from Task
+   3.2 becomes a safety net, not the merge mechanism.
+2. **Check the hash before fetching everything again.** The cron must not
+   re-download ~13 files per region-week on every 20-minute tick.
+
 **Files:**
 - Create: `trigger/ingest-bestsellers.ts`
 
@@ -1364,13 +1393,34 @@ export function priorWednesdays(weekDate: string, count: number): string[] {
   return out;
 }
 
-/** Ingest one region-week. Returns what happened, for reporting. */
+/**
+ * Ingest one region-week.
+ *
+ * skipIfIngested: return early (without any network fetch) when fetch_cache
+ * already records a successful ingest for this region-week. The polling cron
+ * uses this so that, once a week has landed, later ticks cost one DB read
+ * instead of ~13 HTTP downloads. The recheck task and backfill pass false to
+ * force a fresh fetch-and-compare.
+ */
 export const ingestRegionWeek = task({
   id: "ingest-region-week",
   retry: { maxAttempts: 3, factor: 2, minTimeoutInMs: 1000, maxTimeoutInMs: 30_000 },
-  run: async (payload: { slug: string; weekDate: string }) => {
-    const { slug, weekDate } = payload;
+  run: async (payload: { slug: string; weekDate: string; skipIfIngested?: boolean }) => {
+    const { slug, weekDate, skipIfIngested } = payload;
     const db = supabase();
+    const cacheKey = (dbRegion: string) => `aba_v2_${dbRegion}_${weekDate}`;
+
+    if (skipIfIngested) {
+      const dbRegion = REGION_SLUGS.find((r) => r.slug === slug)!.db;
+      const { data: existing } = await db
+        .from("fetch_cache")
+        .select("cache_key")
+        .eq("cache_key", cacheKey(dbRegion))
+        .maybeSingle();
+      if (existing) {
+        return { status: "already_ingested" as const, slug, weekDate, rows: 0 };
+      }
+    }
 
     const week = await fetchRegionWeek(slug, weekDate);
     if (!week) {
@@ -1379,12 +1429,12 @@ export const ingestRegionWeek = task({
     }
 
     const hash = contentHash(week);
-    const cacheKey = `aba_v2_${week.dbRegion}_${weekDate}`;
+    const key = cacheKey(week.dbRegion);
 
     const { data: cached } = await db
       .from("fetch_cache")
       .select("data")
-      .eq("cache_key", cacheKey)
+      .eq("cache_key", key)
       .maybeSingle();
 
     if ((cached?.data as { hash?: string } | null)?.hash === hash) {
@@ -1392,17 +1442,31 @@ export const ingestRegionWeek = task({
       return { status: "unchanged" as const, slug, weekDate, rows: 0 };
     }
 
+    // Replace the region-week wholesale. Delete-then-insert (not upsert) so
+    // rows that no longer exist in the source cannot linger, and so backfill
+    // over the old-parser PNBA rows cannot duplicate books across category
+    // label variants.
     const rows = toDbRows(week);
-    const { error } = await db
+
+    const { error: delError } = await db
       .from("regional_bestsellers")
-      .upsert(rows, { onConflict: "region,week_date,category,rank" });
-    if (error) throw new Error(`Upsert failed for ${slug} ${weekDate}: ${error.message}`);
+      .delete()
+      .eq("region", week.dbRegion)
+      .eq("week_date", weekDate);
+    if (delError) throw new Error(`Delete failed for ${slug} ${weekDate}: ${delError.message}`);
+
+    const { error: insError } = await db.from("regional_bestsellers").insert(rows);
+    if (insError) {
+      // The week is now partially empty; do NOT record the hash, so the next
+      // run re-fetches and repairs it. Trigger.dev retries handle transients.
+      throw new Error(`Insert failed for ${slug} ${weekDate}: ${insError.message}`);
+    }
 
     // Persist the resolved sheet id so history stays reachable even if the
     // abaorg.link shortener is ever retired.
     await db.from("fetch_cache").upsert(
       {
-        cache_key: cacheKey,
+        cache_key: key,
         data: { hash, sheetId: week.sheetId, ingestedAt: new Date().toISOString() },
       },
       { onConflict: "cache_key" }
@@ -1414,37 +1478,80 @@ export const ingestRegionWeek = task({
 });
 
 /**
- * Wednesday cron. Ingests the current publication week plus a rolling recheck
- * of the two prior weeks, so a late ABA correction is picked up.
+ * Wednesday polling cron: current week only, cheap once landed.
  *
- * Runs every 20 minutes across the publication window because ABA's exact
- * publish time drifts. Ingestion is idempotent and hash-gated, so repeated
- * runs are cheap and cannot corrupt anything.
+ * ABA's publish time drifts, so we poll every 20 minutes across the window.
+ * Before a region's sheet exists, a tick costs one shortlink resolve per
+ * region (fetchRegionWeek returns null). After it lands, skipIfIngested makes
+ * every later tick a single fetch_cache read per region. Total Wednesday
+ * traffic: one full ingest per region plus pocket change — not thousands of
+ * requests.
  */
 export const weeklyIngest = schedules.task({
   id: "aba-weekly-ingest",
   cron: { pattern: "*/20 8-16 * * 3", timezone: "America/Los_Angeles" },
   run: async () => {
+    const weekDate = publicationWednesday();
+    const results = [];
+
+    for (const { slug } of REGION_SLUGS) {
+      const r = await ingestRegionWeek.triggerAndWait({
+        slug,
+        weekDate,
+        skipIfIngested: true,
+      });
+      if (r.ok) results.push(r.output);
+      else logger.error("Region failed", { slug, weekDate, error: r.error });
+    }
+
+    const written = results.filter((x) => x.status === "written");
+    if (written.length > 0) {
+      await recalcWeeks([weekDate]); // added in Task 3.4
+    }
+
+    logger.info("Weekly ingest tick complete", {
+      weekDate,
+      written: written.length,
+      results: results.map((x) => `${x.slug}:${x.status}`),
+    });
+    return { weekDate, written: written.length };
+  },
+});
+
+/**
+ * Once-per-Wednesday recheck, after the publication window: force-refetch the
+ * current week and the two prior weeks so a late ABA correction lands. This
+ * is the only place old weeks are re-downloaded, so the rolling recheck costs
+ * one pass per week, not one per tick.
+ */
+export const weeklyRecheck = schedules.task({
+  id: "aba-weekly-recheck",
+  cron: { pattern: "0 17 * * 3", timezone: "America/Los_Angeles" },
+  run: async () => {
     const current = publicationWednesday();
     const weeks = [current, ...priorWednesdays(current, 2)];
+    const touched: string[] = [];
 
-    const results = [];
     for (const weekDate of weeks) {
       for (const { slug } of REGION_SLUGS) {
         const r = await ingestRegionWeek.triggerAndWait({ slug, weekDate });
-        if (r.ok) results.push(r.output);
-        else logger.error("Region failed", { slug, weekDate, error: r.error });
+        if (r.ok && r.output.status === "written" && !touched.includes(weekDate)) {
+          touched.push(weekDate);
+        }
+        if (!r.ok) logger.error("Recheck failed", { slug, weekDate, error: r.error });
       }
     }
 
-    const written = results.filter((r) => r.status === "written");
-    logger.info("Weekly ingest complete", {
-      weeks, written: written.length, total: results.length,
-    });
-    return { weeks, written: written.length, results };
+    if (touched.length > 0) await recalcWeeks(touched); // added in Task 3.4
+
+    logger.info("Weekly recheck complete", { weeks, touched });
+    return { weeks, touched };
   },
 });
 ```
+
+`recalcWeeks` does not exist yet; Task 3.4 adds it. Until then, stub it as a
+no-op so this task compiles, or implement Tasks 3.3 and 3.4 in one sitting.
 
 **Step 2: Typecheck**
 
@@ -1460,8 +1567,10 @@ npm run dev:trigger
 In the Trigger.dev dashboard, run `ingest-region-week` with payload
 `{"slug":"pnba","weekDate":"2026-08-26"}`.
 
-Expected: `status: "written"`, roughly 165 rows. Run it a second time and expect
-`status: "unchanged"` with 0 rows — that proves idempotency.
+Expected: `status: "written"`, roughly 165 rows. Run it again and expect
+`status: "unchanged"` (hash match, no write). Run a third time with
+`{"slug":"pnba","weekDate":"2026-08-26","skipIfIngested":true}` and expect
+`status: "already_ingested"` — that one never touched the network.
 
 **Step 4: Verify in the database**
 
@@ -1479,43 +1588,104 @@ absent — that tab is deliberately skipped.
 
 ```bash
 git add trigger/ingest-bestsellers.ts
-git commit -m "feat(trigger): add ABA v2 ingest task with idempotent upserts"
+git commit -m "feat(trigger): ABA v2 ingest with replace-on-change and cheap polling"
 ```
 
 ---
 
-### Task 3.4: Wire feed regeneration
+### Task 3.4: Extract the recalc pipeline into `trigger/recalc.ts`
 
-**Files:**
-- Modify: `trigger/ingest-bestsellers.ts`
+The scoring and feed logic lives inside `trigger/populate-regional-bestsellers.ts`
+(deleted in Task 5.4), so it must be lifted out — not rewritten — before the
+old task goes. Three pieces move, with two deliberate changes.
 
-**Step 1: Recompute scores and feeds for touched weeks only**
+**What moves unchanged:**
+- `calculateScore(rank, listSize)` — `trigger/populate-regional-bestsellers.ts:171`
+- The `weekly_scores` upsert — same file, ~line 366, conflict key
+  `isbn,region,week_date,category`, including the per-category `list_size`
+  computation that precedes it
+- The `REGIONS` config array (abbreviation/full_name) and the feed upload to
+  storage bucket `feeds`, path `region/{regionCode}.json`, from ~line 503 on
+- The final `generateElsewhereFeeds.trigger()` call
 
-At the end of `weeklyIngest.run`, after the loop, add:
+**Deliberate change 1 — feed inputs come from the new columns.** The old feed
+assembly queried the previous week's rows and called the
+`get_weeks_on_list_batch_regional` RPC. Both are now redundant:
+`assembleFeedJson` takes `previousBooks: {isbn, rank}[]` and
+`weeksOnList: Record<string, number>`, and the ingested rows carry ABA's own
+values. Feed `trigger/feedGenerator.ts` stays completely untouched.
 
 ```typescript
-    const touched = [...new Set(written.map((r) => r.weekDate))];
-    for (const weekDate of touched) {
-      await recalculateWeek(weekDate);
-    }
+const previousBooks: PreviousWeekBook[] = rows
+  .filter((r) => r.last_week_rank !== null)
+  .map((r) => ({ isbn: r.isbn, rank: r.last_week_rank! }));
+
+const weeksOnList: Record<string, number> = Object.fromEntries(
+  rows.filter((r) => r.weeks_on_list !== null)
+       .map((r) => [r.isbn, r.weeks_on_list!])
+);
 ```
 
-Implement `recalculateWeek` by reusing the existing logic from
-`trigger/populate-regional-bestsellers.ts` — read that file's scoring and
-`assembleFeedJson` calls and lift them into a shared helper rather than
-duplicating. Keep `trigger/feedGenerator.ts` untouched; its tests already pass
-and its inputs are unchanged.
+**Deliberate change 2 — feeds regenerate only for the current publication
+week.** The bucket holds ONE feed per region (`region/{code}.json`), always the
+latest week. If `recalcWeeks(["2026-06-03"])` regenerated feeds, the live feed
+would be overwritten with June data. Scores recalculate for any week; feeds
+only when `weekDate === publicationWednesday()`.
 
-**Step 2: Verify the feeds regenerate**
+**What does NOT move:** the 52-week cleanup delete (old task ~line 388). Keep
+that in the weekly cron path only — never in a helper that backfill can reach,
+or a backfill run could delete historical rows.
 
-Trigger `aba-weekly-ingest` manually in the dashboard.
-Expected: 9 feeds regenerated; spot-check one against the site.
+**Files:**
+- Create: `trigger/recalc.ts`
+- Test: `trigger/recalc.test.ts`
+- Modify: `trigger/ingest-bestsellers.ts` (import `recalcWeeks`, drop the stub)
 
-**Step 3: Commit**
+**Step 1: Write failing tests for the pure parts**
+
+Test `calculateScore` (copy its existing behavior — verify against two or three
+hand-computed values from the old file before moving it) and the two
+derivations above: rows with null `last_week_rank` are excluded from
+`previousBooks`; rows with null `weeks_on_list` are absent from the map.
+
+**Step 2: Run tests to verify they fail, then move the code**
+
+Run: `npx vitest --run trigger/recalc.test.ts` — FAIL, then implement
+`recalcWeeks(weekDates: string[])`:
+
+```
+for each weekDate:
+  read regional_bestsellers rows for that week (all regions)
+  per region: compute category list sizes -> scores -> upsert weekly_scores
+  if weekDate === publicationWednesday():
+    per region: build previousBooks/weeksOnList from the rows (above),
+    fetch descriptions from fetch_cache (google_books_info_{isbn}),
+    assembleFeedJson(...), upload to feeds/region/{code}.json
+    then generateElsewhereFeeds.trigger()
+```
+
+Copy the description-batching and error-isolation structure (per-region
+try/catch, throw only if every region fails) from the old task verbatim — it
+encodes real operational lessons.
+
+**Step 3: Wire it into both cron tasks and typecheck**
+
+Replace the Task 3.3 stub with the real import.
+Run: `npx tsc --noEmit -p tsconfig.app.json` — clean.
+
+**Step 4: Verify against the live system**
+
+Trigger `aba-weekly-recheck` manually in the dashboard.
+Expected: scores upserted for 3 weeks; 9 feeds regenerated for the current
+week only. Download one feed from storage and diff against the currently
+published version — sections and entries should match, and `last`/`weeks`
+values should now come from ABA columns.
+
+**Step 5: Commit**
 
 ```bash
-git add trigger/ingest-bestsellers.ts
-git commit -m "feat(trigger): regenerate scores and feeds for ingested weeks"
+git add trigger/recalc.ts trigger/recalc.test.ts trigger/ingest-bestsellers.ts
+git commit -m "feat(trigger): extract score and feed recalc, feed from ABA columns"
 ```
 
 ---
@@ -1592,7 +1762,35 @@ group by week_date order by week_date;
 
 Expected: both now show 9 regions instead of 1.
 
-**Step 6: Commit**
+**Step 6: Recalculate weekly_scores for the backfilled weeks**
+
+List rows without score rows leave the Awards and year-end pages silently
+inconsistent, so this step is not optional. At the end of `backfillGaps.run`,
+after the ingest loop, call the Task 3.4 helper:
+
+```typescript
+await recalcWeeks(weeks);
+```
+
+`recalcWeeks` recomputes `weekly_scores` for any week but regenerates feeds
+only for the current publication week (the bucket holds one feed per region —
+regenerating for a June week would overwrite the live feed). The nightly
+aggregate tables (`book_performance_metrics`, `book_regional_performance`)
+self-correct on their next cron run once `weekly_scores` is right.
+
+Verify:
+
+```sql
+select week_date, count(*) scores
+from weekly_scores
+where week_date in ('2026-06-03','2026-06-24','2026-08-19','2026-08-26')
+group by week_date order by week_date;
+```
+
+Expected: all four weeks present with score counts in the same ballpark as
+neighboring weeks.
+
+**Step 7: Commit**
 
 ```bash
 git add trigger/backfill-aba-v2.ts
@@ -1695,6 +1893,12 @@ mislabeled week — exactly what this audit exists to find.
 
 Trigger with no payload. This is roughly 200 region-weeks and will take a while.
 
+**Note on directionality:** the comparison is archive → stored only. A stored
+row with no archive counterpart (e.g. the old parser's drifted category labels)
+is not flagged; it simply lowers the matched count for that region-week. That
+is acceptable for the audit's purpose — detecting mislabeled weeks — but do
+not read "0 mismatches" as "stored data is a superset-clean match".
+
 **Step 4: Record the findings**
 
 Write the discrepancy summary into
@@ -1713,60 +1917,147 @@ git commit -m "feat(trigger): add read-only audit of history against ABA archive
 
 ## Phase 5: Frontend cutover
 
-### Task 5.1: Read stored rank data instead of deriving it
+**Read this before starting Phase 5.** The main list page's data path today is:
+`useBestsellerData` → `BestsellerParser.fetchBestsellerData()` →
+`src/utils/bestsellerFetcher.ts` → CORS proxies → dead ABA URLs. The fetcher is
+not an auxiliary module — it IS the primary read path, and it no longer has a
+working source. This phase therefore has three parts, strictly in order: build
+the replacement read path (5.1–5.2), rescue the one unrelated function living
+in the doomed file (5.3), and only then delete (5.4). Do not reorder.
+
+### Task 5.1: DB-backed read service
+
+Build the function that assembles a `BestsellerList` (the UI's existing type,
+`src/types/bestseller.ts`) from `regional_bestsellers`. No UI changes yet.
 
 **Files:**
-- Modify: `src/utils/bestsellerCache.ts`
-- Modify: `src/types/bestseller.ts`
+- Modify: `src/services/bestsellerApi.ts` (its header comment already declares
+  it the designated replacement for client-side scraping)
+- Test: `src/services/bestsellerApi.test.ts`
 
-**Step 1: Point the read path at the new columns**
+**Contract:**
 
-Anywhere `previousRank` or `weeksOnList` is currently derived, read
-`last_week_rank` and `weeks_on_list` from `regional_bestsellers` instead.
+```typescript
+export async function fetchBestsellerListFromDb(options: {
+  region: string;            // DB code, e.g. "PNBA"
+  weekDate?: string;         // ISO Wednesday; default = latest week in DB
+  comparisonWeek?: string;   // ISO Wednesday; default = weekDate - 7 days
+}): Promise<{ current: BestsellerList; weekDate: string; comparisonWeek: string }>
+```
 
-Note for the UI: `weeks_on_list` now reflects ABA's full count, not our DB
-history. Values will jump (a long-running title can show 434). This is correct
-and intended — update the methodology copy in
-`src/components/YearEndRankings/MethodologyCard.tsx` to say the count comes from
-ABA.
+**Behavior rules:**
 
-**Step 2: Run the frontend tests**
+1. When `weekDate` is omitted, resolve it with one cheap query:
+   `select week_date ... order by week_date desc limit 1` for the region.
+   (Supabase's 1000-row default limit makes "fetch all and reduce" a bug, not
+   a style issue — never scan the table.)
+2. Fetch the current week's rows for the region (~165 rows, well under the
+   row cap), ordered by category, rank.
+3. **Rank change:** when `comparisonWeek` is the default (exactly 7 days
+   before `weekDate`), `previousRank` comes from the stored `last_week_rank`
+   column — ABA is authoritative. When the caller picked a custom comparison
+   week, fetch that week's rows and diff by ISBN within category instead.
+4. **`weeksOnList`** always comes from the stored `weeks_on_list` column.
+   Null stays undefined — the UI already treats missing as unknown.
+5. **`isNew`** is `last_week_rank === null` in the default case; "absent from
+   the comparison rows" in the custom case. **`wasDropped`** entries (books in
+   the comparison week missing from current) require comparison rows, so
+   compute them in both cases from the fetched comparison week.
+6. `publisher`/`price` are nullable in the DB but required strings in
+   `BestsellerBook` — coalesce to `""`.
+7. Group rows into `BestsellerCategory[]` by the stored category, preserving
+   the DB's category values as names; `BestsellerList.date` is `weekDate`,
+   `title` is `"{region} Independent Bestsellers"`.
 
-Run: `npx vitest --run src/`
-Expected: failures in tests that assert derived values. Update them to reflect
-stored values.
+**Step 1: Write the failing tests**
+
+Use the existing Supabase mock-builder pattern from
+`src/utils/bestsellerFetcher.test.ts` — the mocks must be fully chainable AND
+thenable (a `then` property so `await` resolves them); that pattern is already
+established in this repo, copy it rather than inventing one. Cover:
+
+- default week resolution uses the limit-1 query
+- default comparison reads `last_week_rank` (no second rows query for ranks)
+- custom comparison diffs against the fetched comparison rows
+- `wasDropped` books appear with `wasDropped: true`
+- null publisher/price become `""`
+- null `weeks_on_list` stays undefined on the book
+
+**Step 2: Run to verify they fail, implement, run to green**
+
+Run: `npx vitest --run src/services/bestsellerApi.test.ts`
 
 **Step 3: Commit**
 
 ```bash
-git add src/
-git commit -m "feat(ui): read ABA-supplied rank and weeks-on-list from the database"
+git add src/services/bestsellerApi.ts src/services/bestsellerApi.test.ts
+git commit -m "feat(api): assemble BestsellerList from regional_bestsellers"
 ```
 
 ---
 
-### Task 5.2: Rescue `batchGetBookAudiences` before deleting anything
+### Task 5.2: Switch the UI to the DB read path
 
-`src/utils/bestsellerFetcher.ts` is being deleted, but it also contains
+**Files:**
+- Modify: `src/hooks/useBestsellerData.ts`
+- Modify: `src/components/YearEndRankings/MethodologyCard.tsx`
+- Test: existing hook/page tests
+
+**Step 1: Rewire the hook**
+
+In `useBestsellerData.ts`:
+
+- Replace the `BestsellerParser.fetchBestsellerData(...)` call in the
+  `queryFn` with `fetchBestsellerListFromDb({ region: currentRegion.abbreviation, comparisonWeek })`.
+- **Delete the background historical-fetch effect** (the
+  `shouldFetchNewData` / `fetchHistoricalData` / localStorage block). The
+  browser no longer fetches from ABA at all; history arrives via ingestion.
+- Keep the comparison-week state mechanics — the feature survives, served by
+  rule 3 above.
+
+**Step 2: Update the methodology copy**
+
+`weeks_on_list` now reflects ABA's full count, not this app's DB history.
+Long-running titles jump (e.g. 23 → 434) — correct and intended. Update
+`MethodologyCard.tsx` to say the weeks-on-list figure comes from ABA.
+
+**Step 3: Run the tests and fix assertions**
+
+Run: `npx vitest --run src/`
+Expected: failures limited to tests asserting derived rank values or mocking
+`BestsellerParser`. Update them to the stored-column behavior. Then run the
+app (`npm run dev`) and eyeball the main list page: ranks, change arrows, and
+weeks-on-list render for the current week.
+
+**Step 4: Commit**
+
+```bash
+git add src/
+git commit -m "feat(ui): read bestseller lists from the database"
+```
+
+---
+
+### Task 5.3: Rescue `batchGetBookAudiences` before deleting anything
+
+`src/utils/bestsellerFetcher.ts` is about to be deleted, but it also contains
 `batchGetBookAudiences`, which has **nothing to do with ABA fetching** and is
-imported by four surviving modules:
+imported by surviving modules:
 
 - `src/hooks/useBookAudiences.ts`
 - `src/hooks/useAudiencesByIsbn.ts`
 - `src/services/bookDataService.ts`
 
 Deleting the file without moving this function first will break the build in a
-way that looks like an unrelated failure.
-
-**Files:**
-- Modify: `src/services/bookDataService.ts` (destination)
-- Modify: the two hooks above (update imports)
+way that looks like an unrelated failure. Note: `bookDataService.ts` already
+owns `getDefaultAudience`/`ensureAudienceAssignment` — the fetcher re-exports
+some of these as static wrappers, so check which direction each symbol
+actually flows before moving.
 
 **Step 1: Move the function**
 
-Cut `batchGetBookAudiences` out of `bestsellerFetcher.ts` into
-`src/services/bookDataService.ts`, which already owns book-metadata concerns.
-Bring its existing tests with it.
+Move `batchGetBookAudiences` (and any helper it drags along) into
+`src/services/bookDataService.ts`, with its existing tests.
 
 **Step 2: Update the importers**
 
@@ -1790,24 +2081,31 @@ git commit -m "refactor: move batchGetBookAudiences out of the doomed fetch laye
 
 ---
 
-### Task 5.3: Delete the dead fetch layer
+### Task 5.4: Delete the dead fetch layer
 
-Do this **after** 5.1 and 5.2 are green, so deletion is a separate, revertible
+Do this **after** 5.1–5.3 are green, so deletion is a separate, revertible
 commit.
 
 **Files:**
 - Delete: `src/utils/bestsellerFetcher.ts`, `src/utils/bestsellerFetcher.test.ts`
 - Delete: `src/utils/bestsellerTextParser.ts`
+- Delete: `src/utils/bestsellerParser.ts` (3-line barrel re-exporting the fetcher)
+- Delete: `src/utils/bestsellerCache.ts` **only if** nothing but the fetcher
+  imports it after 5.2 — it holds client-side fetch-decision logic
+  (`shouldFetchNewData`, cache read/write) that is meaningless without live
+  fetching. Verify with grep first; if something still uses it, leave it and
+  note why.
 - Delete: `trigger/bookweb-scraper.ts`, `trigger/bookweb-scraper.test.ts`
 - Delete: `trigger/parseRegionalList.ts`, `trigger/parseRegionalList.test.ts`
-- Delete: `trigger/populate-regional-bestsellers.ts`
+- Delete: `trigger/populate-regional-bestsellers.ts` (recalc logic was lifted
+  in Task 3.4)
 - Delete: `supabase/functions/scrape-regional-urls/`, `fetch-bestseller-file/`,
   `fetch-regional-lists/`, `fetch-previous-week/`, `fetch-pnba-lists/`
 
 **Step 1: Confirm nothing still imports them**
 
 ```bash
-grep -rn "bestsellerFetcher\|bestsellerTextParser\|bookweb-scraper\|parseRegionalList\|scrape-regional-urls\|fetch-bestseller-file\|fetch-previous-week\|fetch-regional-lists\|fetch-pnba-lists" src trigger supabase scripts
+grep -rn "bestsellerFetcher\|bestsellerParser\|bestsellerTextParser\|bestsellerCache\|bookweb-scraper\|parseRegionalList\|populate-regional-bestsellers\|scrape-regional-urls\|fetch-bestseller-file\|fetch-previous-week\|fetch-regional-lists\|fetch-pnba-lists" src trigger supabase scripts
 ```
 
 Expected: no results outside the files being deleted. Resolve any that remain
@@ -1817,7 +2115,7 @@ before deleting.
 
 ```bash
 git rm src/utils/bestsellerFetcher.ts src/utils/bestsellerFetcher.test.ts \
-       src/utils/bestsellerTextParser.ts \
+       src/utils/bestsellerTextParser.ts src/utils/bestsellerParser.ts \
        trigger/bookweb-scraper.ts trigger/bookweb-scraper.test.ts \
        trigger/parseRegionalList.ts trigger/parseRegionalList.test.ts \
        trigger/populate-regional-bestsellers.ts
@@ -1827,6 +2125,8 @@ git rm -r supabase/functions/scrape-regional-urls \
           supabase/functions/fetch-previous-week \
           supabase/functions/fetch-pnba-lists
 ```
+
+(Plus `bestsellerCache.ts` if step 1 cleared it.)
 
 **Step 3: Update the deploy script**
 
@@ -1869,8 +2169,10 @@ npm run deploy:trigger
 **Step 3: Confirm the schedule is attached**
 
 Only tasks in the **latest deployment** run on a schedule. Check the Trigger.dev
-dashboard shows `aba-weekly-ingest` with cron `*/20 8-16 * * 3`
-(America/Los_Angeles).
+dashboard shows both schedules (America/Los_Angeles):
+
+- `aba-weekly-ingest` — `*/20 8-16 * * 3`
+- `aba-weekly-recheck` — `0 17 * * 3`
 
 **Step 4: Verify end to end the following Wednesday**
 
@@ -1893,7 +2195,7 @@ Expected: the new week present with 9 regions.
 | 2 | `npx vitest --run trigger/aba/` passes |
 | 3 | Re-running the ingest reports `unchanged`; PNBA 2026-08-26 has 11 categories |
 | 4 | 06-03 and 06-24 show 9 regions; audit results written up |
-| 5 | `npm run build` and `npx vitest --run` pass with the old layer deleted |
+| 5 | Main page renders from the DB read path; `npm run build` and `npx vitest --run` pass with the old layer deleted |
 | 6 | Schedule live; a real Wednesday ingests unattended |
 
 ## Do not touch

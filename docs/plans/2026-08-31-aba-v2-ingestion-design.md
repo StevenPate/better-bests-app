@@ -57,11 +57,11 @@ internally consistent and can be trusted as a historical record.
 | Decision | Choice | Rationale |
 |---|---|---|
 | Source of truth | **Google Sheets** via `abaorg.link` | Already columnar; deletes the parser layer instead of rewriting it. No Cloudflare. |
-| Export format | **xlsx**, not CSV | CSV export returns only the first tab and per-tab CSV needs a `gid` that the sheet HTML does not expose. xlsx returns all 12 tabs plus their names in one request. |
+| Export format | **xlsx for tab names, gviz CSV for data** | The plain CSV export returns only the first tab; the gviz endpoint serves any tab by name as clean typed CSV (string ISBNs, `$` prices) but silently returns the FIRST tab for an unknown name. So: enumerate tabs from the xlsx `workbook.xml` (detects renames), then request only confirmed names via gviz. |
 | Client-side live fetch | **Delete** | Browser reads `regional_bestsellers` and generated feeds only. |
 | Region codes | **Map at ingest boundary** | `nciba→CALIBAN`, `sciba→CALIBAS`. Zero migration risk to ~8k historical rows. A real migration with aliases follows later — see Deferred. |
 | `Last Week` / `Weeks on List` | **Store; ABA authoritative** | Retires previous-week fetching and DB-appearance counting. |
-| Cron behaviour | **Poll for date, idempotent upsert, rolling 2-week recheck** | Retires the `skip if populated` guard. |
+| Cron behaviour | **Two crons: cheap polling + once-weekly recheck** | Polling ticks skip already-ingested region-weeks via `fetch_cache`; a single 17:00 PT pass force-refetches the current + 2 prior weeks. Retires the `skip if populated` guard without hammering Google every 20 minutes. |
 | Backfill | **Fill gaps, audit the rest read-only** | Fills 4 weeks; audits 19 without overwriting. |
 
 ### Cloudflare note
@@ -79,12 +79,22 @@ Trigger.dev cron (Wednesday, polling)
   └─ for each of 9 regions:
        resolve  abaorg.link/{slug}-bestsellers-sheet-{YYYY-MM-DD}  → Sheet ID
        persist  Sheet ID into fetch_cache          (survives shortener retirement)
-       fetch    docs.google.com/spreadsheets/d/{id}/export?format=xlsx
+       fetch    {id}/export?format=xlsx            (tab names only)
+       fetch    {id}/gviz/tq?tqx=out:csv&sheet=…   (per-tab data, typed CSV)
        VALIDATE Report Details region + serial date == requested
        map      tab name → DB category, slug → DB region code
-       upsert   regional_bestsellers on (region, week_date, category, rank)
-  └─ recalculate weekly_scores → regenerate 9 JSON feeds (touched weeks only)
+       replace  regional_bestsellers region-week (delete + insert, hash-gated)
+  └─ recalculate weekly_scores for touched weeks
+  └─ regenerate the 9 JSON feeds — current publication week ONLY (the bucket
+     holds one feed per region; a historical recalc must never overwrite it)
 ```
+
+Persistence is **replace-on-change, not merge**: when a region-week's content
+hash differs from the recorded one, its rows are deleted and re-inserted. A
+plain upsert would leave ghost rows when a correction shrinks a category, and
+would duplicate books across category-label variants when backfilling over
+rows written by the old parser. The unique index on
+`(region, week_date, category, rank)` is a safety net, not the merge mechanism.
 
 The label comes from the *request* and is then *confirmed by the file*. The
 clock is never consulted. This makes the week-shift bug class structurally
@@ -133,12 +143,13 @@ feature.
 Note this is distinct from `Childrens Series TItles`, which *is* title-level
 with ISBNs and maps to the existing `CHILDREN'S SERIES TITLES` category.
 
-### ISBN precision
+### ISBN handling
 
-xlsx stores ISBNs as floats (`9.780063511637E12`). That is 13 significant
-digits, inside float64's exact-integer range, so it round-trips losslessly —
-but the parser must format as a fixed integer and validate against
-`/^97[89]\d{10}$/`. It must never rely on default number formatting.
+The gviz CSV endpoint returns ISBNs as plain strings (`"9780063511637"`), so no
+float decoding is needed on the data path. Rows are still validated against
+`/^97[89]\d{10}$/` and dropped if they fail. The xlsx export (which stores
+ISBNs as floats like `9.780063511637E12`) is used only for tab-name
+enumeration — never for cell values.
 
 ## Backfill and audit
 
@@ -192,3 +203,12 @@ Nothing before `2026-03-25` has an external source of truth ever again.
   the `regions` lookup, feeds and UI, with old codes kept as aliases at the
   feed boundary. Deliberately after the dust settles.
 - **`Childrens Series`** series-level list as a possible new feature.
+- **National list.** ABA also publishes a `national` slug with the same sheet
+  structure. The app has always been regional-only, so it is deliberately not
+  ingested — but the source is there if a national view is ever wanted.
+
+## Verified assumptions
+
+- All nine regions' `Report Details` labels follow `"{SLUG} Bestsellers"`
+  exactly (checked live 2026-08-31). The ingest validation depends on this
+  format and fails loudly if ABA changes it.
