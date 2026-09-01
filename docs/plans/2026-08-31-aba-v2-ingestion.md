@@ -1320,6 +1320,17 @@ git commit -m "feat(aba): add row flattening and content hashing"
 
 ### Task 3.2: Add the uniqueness safety net
 
+> **AMENDMENT 2026-09-01:** the duplicate pre-check found ~4,300 colliding
+> slots through 2026-07-29 — nearly all MASS MARKET / YOUNG ADULT, i.e. the
+> old parser's category-swallowing bug: several real lists coexist under one
+> label with 2–4 distinct ISBNs per rank slot. These are mislabeled real
+> books, NOT deletable duplicates. The index was therefore created PARTIAL
+> (`where week_date >= '2026-08-01'`) — everything the new pipeline writes is
+> covered; historical mislabeling is left for the Phase 4 audit to quantify
+> (within the archive window a full re-ingest could repair it, subject to a
+> decision after the audit reports). Delete-then-insert persistence never
+> needed the index as an ON CONFLICT target, so partial costs nothing.
+
 The upsert needs a unique index to conflict on.
 
 **Files:**
