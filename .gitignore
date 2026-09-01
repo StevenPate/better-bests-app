@@ -70,3 +70,8 @@ supabase/.env*
 
 # Local Netlify folder
 .netlify
+
+# TypeScript incremental build state
+*.tsbuildinfo
+# tsc -b emits this into the repo root; its presence breaks trigger.dev deploys
+trigger.config.js
