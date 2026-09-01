@@ -50,6 +50,42 @@ describe("toDbRows", () => {
   });
 });
 
+describe("toDbRows dedup", () => {
+  // The DB enforces UNIQUE (region, isbn, week_date): one row per book per
+  // region-week. ABA lists the same book on several lists, so we keep the
+  // most specific one: CHILDREN'S INTEREST is a composite roll-up and only
+  // contributes books that appear on no other list.
+  const book = (isbn: string, rank: number) => ({
+    rank, isbn, title: "T", author: "A", publisher: null, price: null,
+    last_week_rank: null, weeks_on_list: null,
+  });
+
+  it("keeps the specific-list row when a book is also on Childrens Interest", () => {
+    const w = week();
+    w.byCategory.set("EARLY & MIDDLE GRADE READERS", [book("9780593809891", 3)]);
+    w.byCategory.set("CHILDREN'S INTEREST", [
+      book("9780593809891", 5),   // duplicate of the EMG book
+      book("9781339028019", 10),  // only on the composite list
+    ]);
+    const rows = toDbRows(w);
+    const kept = rows.filter((r) => r.isbn === "9780593809891");
+    expect(kept).toHaveLength(1);
+    expect(kept[0].category).toBe("EARLY & MIDDLE GRADE READERS");
+    expect(kept[0].rank).toBe(3);
+    // The composite-only book survives.
+    expect(rows.some((r) => r.isbn === "9781339028019" && r.category === "CHILDREN'S INTEREST")).toBe(true);
+  });
+
+  it("is deterministic when a book is on two specific lists", () => {
+    const w = week();
+    w.byCategory.set("CHILDREN'S TITLES", [book("9781419788109", 1)]);
+    w.byCategory.set("EARLY & MIDDLE GRADE READERS", [book("9781419788109", 1)]);
+    const rows = toDbRows(w).filter((r) => r.isbn === "9781419788109");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].category).toBe("CHILDREN'S TITLES"); // priority order
+  });
+});
+
 describe("contentHash", () => {
   it("is stable for identical content", () => {
     expect(contentHash(week())).toBe(contentHash(week()));

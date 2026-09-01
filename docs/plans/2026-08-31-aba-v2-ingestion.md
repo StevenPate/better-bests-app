@@ -1377,6 +1377,26 @@ git commit -m "feat(db): add unique index for idempotent bestseller upserts"
 
 ### Task 3.3: The ingest task itself
 
+> **AMENDMENT 2026-09-01, discovered during the live dev test:** two facts the
+> plan did not anticipate, both now encoded in code and tests:
+>
+> 1. `regional_bestsellers` has a pre-existing UNIQUE (region, isbn,
+>    week_date): the established model is ONE row per book per region-week
+>    (the old pipeline upserted on that key, so a multi-list book kept
+>    whichever category was processed last). `toDbRows` now dedupes
+>    deliberately: specific lists win in a fixed priority order and the
+>    composite CHILDREN'S INTEREST comes last, contributing only books on no
+>    other list. Faithful multi-list storage would need that constraint
+>    dropped and scoring de-dup — deferred.
+> 2. The workbooks carry ~50-deep internal lists; the published lists (and
+>    all scoring history — calculateScore keys on list size) are top 15.
+>    `rowsFromCells` caps at rank ≤ 15.
+>
+> Verified live against production data (PNBA 2026-08-26): written 135 rows,
+> re-run → unchanged, skipIfIngested → already_ingested with no network.
+> Also: use `npx trigger.dev@4.4.6 dev` — `@latest` (4.5.15) aborts on the
+> version mismatch with the pinned 4.4.6 packages.
+
 Two persistence rules matter here, both learned the hard way:
 
 1. **Replace, never merge.** When content changes we delete the region-week's

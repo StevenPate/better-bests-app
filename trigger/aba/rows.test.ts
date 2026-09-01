@@ -87,6 +87,14 @@ describe("rowsFromCells", () => {
     ).toThrow(/missing required column/i);
   });
 
+  it("caps at the published rank 15 — sheets carry top-50 internal lists", () => {
+    // Scoring history and the UI are built on 15-deep lists; deeper rows
+    // would silently rescale calculateScore's listSize.
+    const hf = rowsFromCells(tabs.get("Hardcover Fiction")!);
+    expect(Math.max(...hf.map((r) => r.rank))).toBeLessThanOrEqual(15);
+    expect(hf.length).toBe(15);
+  });
+
   it("preserves ABA's weeks-on-list beyond our DB history", () => {
     // Braiding Sweetgrass shows 400+ weeks — proof the value is ABA's count.
     const pbnf = rowsFromCells(tabs.get("Paperback Nonfiction")!);

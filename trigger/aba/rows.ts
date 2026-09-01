@@ -11,6 +11,14 @@ export interface AbaBookRow {
 
 const REQUIRED = ["rank", "isbn", "title", "author"] as const;
 
+/**
+ * ABA's workbooks carry ~50-deep internal lists, but the published lists —
+ * and every score in our history (calculateScore keys on list size) — are
+ * top 15. Ingest only the published portion; the deeper data stays in ABA's
+ * sheets if ever wanted.
+ */
+const MAX_RANK = 15;
+
 function headerIndex(header: string[]): Record<string, number> {
   const idx: Record<string, number> = {};
   header.forEach((h, i) => {
@@ -85,7 +93,7 @@ export function rowsFromCells(cells: string[][]): AbaBookRow[] {
     if (!/^97[89]\d{10}$/.test(isbn)) continue;
 
     const rank = optionalInt(row[idx.rank]);
-    if (rank === null) continue;
+    if (rank === null || rank > MAX_RANK) continue;
 
     out.push({
       rank,

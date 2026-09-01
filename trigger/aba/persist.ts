@@ -16,10 +16,45 @@ export interface DbRow {
   list_title: string;
 }
 
+/**
+ * regional_bestsellers enforces UNIQUE (region, isbn, week_date): one row per
+ * book per region-week — the model every downstream consumer (scoring without
+ * double-counting, book detail, heat maps) assumes. ABA lists the same book
+ * on several lists, so when flattening we keep the most specific one. The
+ * old pipeline resolved this accidentally (last upsert won); this order is
+ * deliberate: CHILDREN'S INTEREST is a composite roll-up of the other
+ * children's lists and comes last, contributing only books that appear
+ * nowhere else.
+ */
+const CATEGORY_PRIORITY = [
+  "HARDCOVER FICTION",
+  "HARDCOVER NONFICTION",
+  "TRADE PAPERBACK FICTION",
+  "TRADE PAPERBACK NONFICTION",
+  "MASS MARKET",
+  "CHILDREN'S ILLUSTRATED",
+  "CHILDREN'S TITLES",
+  "CHILDREN'S SERIES TITLES",
+  "EARLY & MIDDLE GRADE READERS",
+  "YOUNG ADULT",
+  "CHILDREN'S INTEREST", // composite — always last
+];
+
+function priorityOf(category: string): number {
+  const i = CATEGORY_PRIORITY.indexOf(category);
+  return i === -1 ? CATEGORY_PRIORITY.length : i;
+}
+
 export function toDbRows(week: RegionWeek): DbRow[] {
   const rows: DbRow[] = [];
-  for (const [category, books] of week.byCategory) {
+  const seen = new Map<string, number>(); // isbn -> index in rows
+  const orderedCategories = [...week.byCategory.entries()].sort(
+    (a, b) => priorityOf(a[0]) - priorityOf(b[0])
+  );
+  for (const [category, books] of orderedCategories) {
     for (const b of books) {
+      if (seen.has(b.isbn)) continue; // a more specific list already has it
+      seen.set(b.isbn, rows.length);
       rows.push({
         region: week.dbRegion,
         week_date: week.weekDate,
