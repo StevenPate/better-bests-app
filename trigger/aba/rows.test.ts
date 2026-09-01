@@ -69,6 +69,15 @@ describe("rowsFromCells", () => {
     expect(rows[0].title).toBe("Good");
   });
 
+  it("recovers purely-numeric titles that Google stored as number cells", () => {
+    // "1984" is a real Mass Market #1; its cell arrives as "1984.0".
+    const cells = [
+      ["Rank", "ISBN", "Title", "Author", "Publisher", "Price", "Last Week", "Weeks on List"],
+      ["1.0", "9.780451524935E12", "1984.0", "George Orwell", "Signet", "12.0", "1.0", "588.0"],
+    ];
+    expect(rowsFromCells(cells)[0].title).toBe("1984");
+  });
+
   it("throws when the expected columns are missing", () => {
     expect(() =>
       rowsFromCells([

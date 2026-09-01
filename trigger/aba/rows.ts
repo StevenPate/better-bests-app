@@ -47,6 +47,22 @@ function optionalInt(raw: string | undefined): number | null {
   return Number.isFinite(n) ? Math.round(n) : null;
 }
 
+/**
+ * Text fields normally pass through, but a purely-numeric value (the title
+ * "1984", say) is stored by Google as a number cell and arrives as float
+ * text ("1984.0"). Recover the natural rendering.
+ */
+function textFromCell(raw: string | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  if (/^-?\d+(\.\d+)?(E[+-]?\d+)?$/i.test(trimmed)) {
+    const n = Number(trimmed);
+    if (Number.isFinite(n)) {
+      return Number.isInteger(n) ? n.toFixed(0) : String(n);
+    }
+  }
+  return trimmed;
+}
+
 /** Price arrives as a bare number ("30.0"); the DB stores "$30.00". */
 function priceFromCell(raw: string | undefined): string | null {
   const trimmed = (raw ?? "").trim();
@@ -74,9 +90,9 @@ export function rowsFromCells(cells: string[][]): AbaBookRow[] {
     out.push({
       rank,
       isbn,
-      title: (row[idx.title] ?? "").trim(),
-      author: (row[idx.author] ?? "").trim(),
-      publisher: (row[idx.publisher] ?? "").trim() || null,
+      title: textFromCell(row[idx.title]),
+      author: textFromCell(row[idx.author]),
+      publisher: textFromCell(row[idx.publisher]) || null,
       price: priceFromCell(row[idx.price]),
       last_week_rank: optionalInt(row[idx["last week"]]),
       weeks_on_list: optionalInt(row[idx["weeks on list"]]),
