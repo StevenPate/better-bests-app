@@ -43,26 +43,23 @@ vi.mock('@/integrations/supabase/client', () => {
   };
 });
 
-// Mock BestsellerParser to prevent data fetching during routing tests
-vi.mock('@/utils/bestsellerParser', () => ({
-  BestsellerParser: class {
-    static fetchBestsellerData = vi.fn(() => Promise.resolve({
-      current: {
-        date: '2024-01-03',
-        categories: [],
-      },
-      previous: {
-        date: '2023-12-27',
-        categories: [],
-      },
-      adds: [],
-      drops: [],
-    }));
-    static shouldFetchNewData = vi.fn(() => Promise.resolve(false));
-    static fetchHistoricalData = vi.fn(() => Promise.resolve());
-    static getBookHistory = vi.fn(() => Promise.resolve([]));
-    static getBookAudience = vi.fn(() => Promise.resolve(null));
-  },
+// Mock the data layer to prevent fetching during routing tests
+vi.mock('@/services/bestsellerApi', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  fetchBestsellerListFromDb: vi.fn(() =>
+    Promise.resolve({
+      current: { title: 'Test', date: '2024-01-03', categories: [] },
+      weekDate: '2024-01-03',
+      comparisonWeek: '2023-12-27',
+    })
+  ),
+}));
+
+vi.mock('@/services/bookDataService', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getBookHistory: vi.fn(() => Promise.resolve([])),
+  getBookAudience: vi.fn(() => Promise.resolve(null)),
+  batchGetBookAudiences: vi.fn(() => Promise.resolve({})),
 }));
 
 const renderApp = (initialPath: string) => {

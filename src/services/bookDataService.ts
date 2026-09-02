@@ -387,3 +387,46 @@ export async function saveToDatabase(list: BestsellerList, weekDate: Date, regio
     logger.debug('BestsellerParser', 'Skipping fallback database save - continuing with display');
   }
 }
+
+export interface PositionHistory {
+  date: string;
+  position: number;
+  category: string;
+  isNew: boolean;
+  wasDropped: boolean;
+}
+
+/** Historical list positions for one book, one entry per week. */
+export async function getBookHistory(isbn: string): Promise<PositionHistory[]> {
+  try {
+    const { data, error } = await supabase
+      .from('book_positions')
+      .select('*')
+      .eq('isbn', isbn)
+      .order('week_date', { ascending: false });
+
+    if (error) {
+      logger.error('Error fetching book history:', error);
+      return [];
+    }
+
+    // Remove duplicates by week_date, keeping the first occurrence
+    const uniqueWeeks = new Map<string, Record<string, unknown>>();
+    data?.forEach((record) => {
+      if (!uniqueWeeks.has(record.week_date)) {
+        uniqueWeeks.set(record.week_date, record);
+      }
+    });
+
+    return Array.from(uniqueWeeks.values()).map((record) => ({
+      date: record.week_date as string,
+      position: record.rank as number,
+      category: record.category as string,
+      isNew: false,
+      wasDropped: false,
+    }));
+  } catch (error) {
+    logger.error('Error getting book history:', error);
+    return [];
+  }
+}

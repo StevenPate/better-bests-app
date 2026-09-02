@@ -35,7 +35,7 @@
     "supabase:link": "supabase link",
     "supabase:db:push": "supabase db push",
     "supabase:migration:list": "supabase migration list",
-    "supabase:functions:deploy": "supabase functions deploy fetch-pnba-lists && supabase functions deploy get-bestseller-data && supabase functions deploy batch-operations",
+    "supabase:functions:deploy": "supabase functions deploy get-bestseller-data && supabase functions deploy batch-operations",
     "supabase:deploy": "npm run supabase:db:push && npm run supabase:functions:deploy",
     "supabase:logs": "supabase functions logs",
     "deploy:backend": "echo '🚀 Deploying secure backend scraping system...' && npm run supabase:deploy",

@@ -16,7 +16,6 @@ const Auth = lazy(() => import("./pages/Auth").then(module => ({ default: module
 const About = lazy(() => import("./pages/About"));
 const Elsewhere = lazy(() => import("./pages/Elsewhere"));
 const RegionUnique = lazy(() => import("./pages/RegionUnique"));
-const Diagnostics = lazy(() => import("./pages/Diagnostics"));
 const Awards = lazy(() => import("./pages/Awards"));
 const Methodology = lazy(() => import("./pages/Methodology"));
 
@@ -117,7 +116,6 @@ const App = () => (
           {/* Auth route - outside region context */}
           <Route path="/auth" element={<Auth />} />
           <Route path="/about" element={<About />} />
-          <Route path="/diagnostics" element={<Diagnostics />} />
           <Route path="/review" element={<ReviewDefaultRedirect />} />
           <Route path="/review/:year/:category?/:region?" element={<Awards />} />
           <Route path="/review/:year/methodology" element={<Methodology />} />

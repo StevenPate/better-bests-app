@@ -58,12 +58,11 @@ vi.mock('@/hooks/useRegion', () => ({
   }),
 }));
 
-// Mock BestsellerParser
-vi.mock('@/utils/bestsellerParser', () => ({
-  BestsellerParser: {
-    getBookAudience: vi.fn().mockResolvedValue('A'),
-    updateBookAudience: vi.fn().mockResolvedValue(undefined),
-  },
+// Mock the book-data service
+vi.mock('@/services/bookDataService', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getBookAudience: vi.fn().mockResolvedValue('A'),
+  updateBookAudience: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Helper to wrap component with Router

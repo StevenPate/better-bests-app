@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BestsellerParser } from "@/utils/bestsellerParser";
+import { getBookHistory, getBookAudience, updateBookAudience } from "@/services/bookDataService";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useRegion } from "@/hooks/useRegion";
@@ -69,7 +69,7 @@ const BookDetail = () => {
 
   const fetchPositionHistory = async (isbn: string): Promise<PositionHistory[]> => {
     try {
-      const history = await BestsellerParser.getBookHistory(isbn);
+      const history = await getBookHistory(isbn);
       return history || [];
     } catch (error) {
       logger.error('Error fetching position history:', error);
@@ -79,7 +79,6 @@ const BookDetail = () => {
 
   const fetchCurrentPosition = async (isbn: string): Promise<CurrentPosition | null> => {
     try {
-      const parser = new BestsellerParser();
       const currentWeek = new Date();
       // Get the most recent Wednesday
       const daysSinceWednesday = (currentWeek.getDay() + 4) % 7;
@@ -114,7 +113,7 @@ const BookDetail = () => {
 
   const fetchBookAudience = async (isbn: string): Promise<string> => {
     try {
-      const audience = await BestsellerParser.getBookAudience(isbn, currentRegion.abbreviation);
+      const audience = await getBookAudience(isbn, currentRegion.abbreviation);
       return audience || '';
     } catch (error) {
       logger.error('Error fetching book audience:', error);
@@ -128,7 +127,7 @@ const BookDetail = () => {
     setBookAudience(audience);
 
     try {
-      await BestsellerParser.updateBookAudience(isbn, audience, currentRegion.abbreviation);
+      await updateBookAudience(isbn, audience, currentRegion.abbreviation);
       toast({
         title: "Updated",
         description: `Audience set to ${audience === 'A' ? 'Adult' : audience === 'T' ? 'Teen' : 'Children'} for ${currentRegion.abbreviation}`,
