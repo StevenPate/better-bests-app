@@ -85,6 +85,22 @@ pipeline, which is deployed and scheduled.
     `Childrens Series TItles` typo, gviz serving the wrong tab. Expect more;
     the fail-loud tab mapping is the tripwire.
 
+## Google Books quota (structural — surfaced 2026-09-01 as "PDF not working")
+
+The app fetches Google Books keylessly, drawing on Google's **shared
+anonymous daily quota**, which exhausts unpredictably. When it does, every
+uncached ISBN 429s; before the circuit-breaker fix, per-ISBN retry backoff
+froze "Generate PDF" for minutes. The breaker (three consecutive 429s → fail
+fast for 10 min, degrade to cached/"Unknown" genres) fixes the hang, not the
+scarcity. Real fixes, either/both:
+
+- **Add a Google Books API key** (free tier: 1,000 req/day per project,
+  raisable) so quota is owned, not shared.
+- **Pre-warm the cache server-side:** a Trigger.dev step after weekly ingest
+  that fetches book info for new ISBNs into `fetch_cache`
+  (`google_books_info_*`), so browsers rarely need live fetches at all. The
+  ingest knows exactly which ISBNs are new each week.
+
 ## Codebase debt (pre-existing, unrelated to this project)
 
 15. **47 TypeScript errors under `tsc --noEmit`** in `src/` (e.g.

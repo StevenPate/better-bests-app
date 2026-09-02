@@ -15,8 +15,7 @@ import { FetchError, ErrorCode, logError } from '@/lib/errors';
 import {
   bookInfoCache, categoryCache, coverCache, pubDateCache,
   requestQueue, fetchWithRetry,
-  getSupabaseCachedBookInfo, setSupabaseCachedBookInfo
-} from './googleBooksCache';
+  getSupabaseCachedBookInfo, setSupabaseCachedBookInfo, quotaBreaker } from './googleBooksCache';
 
 interface GoogleBooksVolume {
   volumeInfo: {
@@ -481,6 +480,7 @@ export const fetchGoogleBooksPubDatesBatch = async (
  * ```
  */
 export const clearGoogleBooksCache = (): void => {
+  quotaBreaker.reset();
   categoryCache.clear();
 };
 

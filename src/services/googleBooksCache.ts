@@ -92,6 +92,55 @@ export class RequestQueue {
 export const requestQueue = new RequestQueue(MAX_CONCURRENT_REQUESTS);
 
 /**
+ * Circuit breaker for Google Books quota exhaustion.
+ *
+ * The app fetches keylessly, drawing on Google's shared anonymous daily
+ * quota. When that pool is exhausted every request 429s for hours, and
+ * per-ISBN retry backoff turned "Generate PDF" into a multi-minute freeze
+ * (2026-09-01). Three consecutive 429s open the breaker: further fetches
+ * fail instantly (callers already degrade to cached/"Unknown" data) and it
+ * re-closes after a cooldown or on any success.
+ */
+const BREAKER_THRESHOLD = 3;
+const BREAKER_COOLDOWN_MS = 10 * 60 * 1000;
+
+class QuotaBreaker {
+  private consecutive429s = 0;
+  private openedAt: number | null = null;
+
+  isOpen(): boolean {
+    if (this.openedAt === null) return false;
+    if (Date.now() - this.openedAt > BREAKER_COOLDOWN_MS) {
+      this.reset(); // half-open: let the next attempt probe the API
+      return false;
+    }
+    return true;
+  }
+
+  record429(): void {
+    this.consecutive429s++;
+    if (this.consecutive429s >= BREAKER_THRESHOLD && this.openedAt === null) {
+      this.openedAt = Date.now();
+      logger.warn(
+        `Google Books quota breaker OPEN after ${this.consecutive429s} consecutive 429s — ` +
+        `skipping fetches for ${BREAKER_COOLDOWN_MS / 60000} minutes (cached data still serves)`
+      );
+    }
+  }
+
+  recordSuccess(): void {
+    this.reset();
+  }
+
+  reset(): void {
+    this.consecutive429s = 0;
+    this.openedAt = null;
+  }
+}
+
+export const quotaBreaker = new QuotaBreaker();
+
+/**
  * Fetch with retry logic and exponential backoff
  */
 export async function fetchWithRetry<T>(
@@ -99,14 +148,23 @@ export async function fetchWithRetry<T>(
   retries: number = MAX_RETRIES
 ): Promise<T> {
   for (let i = 0; i < retries; i++) {
+    // Checked before every attempt so an exhausted quota short-circuits
+    // mid-call, not just on later calls.
+    if (quotaBreaker.isOpen()) {
+      throw new Error('Google Books quota exhausted (circuit breaker open)');
+    }
     try {
-      return await fn();
+      const result = await fn();
+      quotaBreaker.recordSuccess();
+      return result;
     } catch (error: unknown) {
       const err = error as { status?: number; message?: string };
       const isRateLimited = err?.status === 429 || err?.message?.includes('429');
       const isLastAttempt = i === retries - 1;
 
-      if (isRateLimited && !isLastAttempt) {
+      if (isRateLimited) {
+        quotaBreaker.record429();
+        if (quotaBreaker.isOpen() || isLastAttempt) throw error;
         const delay = RETRY_DELAYS[i] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
         logger.warn(`Google Books rate limited, retrying in ${delay}ms (attempt ${i + 1}/${retries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
