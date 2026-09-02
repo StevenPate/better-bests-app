@@ -10,7 +10,7 @@
  * 3. Once fully migrated, old scraping code can be removed
  */
 
-import { BestsellerList } from '@/types/bestseller';
+import { BestsellerList, BestsellerBook } from '@/types/bestseller';
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
 
@@ -208,3 +208,174 @@ export class BestsellerApi {
  * Export as default for easier migration from BestsellerParser
  */
 export default BestsellerApi;
+
+// ============================================================================
+// DB-backed list assembly (ABA v2 era)
+// ============================================================================
+//
+// Since the 2026 ABA source migration, the browser never fetches from ABA:
+// Trigger.dev ingests the Google Sheets into regional_bestsellers and this
+// function assembles the UI's BestsellerList straight from those rows.
+
+interface DbListRow {
+  isbn: string;
+  title: string;
+  author: string;
+  publisher: string | null;
+  price: string | null;
+  rank: number;
+  category: string | null;
+  last_week_rank: number | null;
+  weeks_on_list: number | null;
+}
+
+/** Display order for category sections; unknown categories sort last, alphabetically. */
+const CATEGORY_DISPLAY_ORDER = [
+  'HARDCOVER FICTION',
+  'HARDCOVER NONFICTION',
+  'TRADE PAPERBACK FICTION',
+  'TRADE PAPERBACK NONFICTION',
+  'MASS MARKET',
+  "CHILDREN'S ILLUSTRATED",
+  "CHILDREN'S TITLES",
+  "CHILDREN'S SERIES TITLES",
+  'EARLY & MIDDLE GRADE READERS',
+  'YOUNG ADULT',
+  "CHILDREN'S INTEREST",
+];
+
+function displayOrder(category: string): number {
+  const i = CATEGORY_DISPLAY_ORDER.indexOf(category);
+  return i === -1 ? CATEGORY_DISPLAY_ORDER.length : i;
+}
+
+function isoMinusDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().split('T')[0];
+}
+
+async function fetchWeekRows(region: string, weekDate: string): Promise<DbListRow[]> {
+  const { data, error } = await supabase
+    .from('regional_bestsellers')
+    .select('isbn, title, author, publisher, price, rank, category, last_week_rank, weeks_on_list')
+    .eq('region', region)
+    .eq('week_date', weekDate)
+    .order('rank', { ascending: true });
+  if (error) throw new Error(`bestseller rows query failed: ${error.message}`);
+  return (data ?? []) as DbListRow[];
+}
+
+export interface DbListResult {
+  current: BestsellerList;
+  weekDate: string;
+  comparisonWeek: string;
+}
+
+/**
+ * Assemble a BestsellerList from regional_bestsellers.
+ *
+ * Rank-change semantics:
+ * - Default comparison (exactly one week back): `previousRank` comes from the
+ *   stored `last_week_rank` column — ABA is authoritative.
+ * - Custom comparison week: `previousRank` is diffed against that week's
+ *   stored rows by ISBN within category.
+ * - `wasDropped` entries (on the comparison list, absent now) always come
+ *   from the fetched comparison rows.
+ * - `weeksOnList` is always the stored ABA count; null stays undefined.
+ */
+export async function fetchBestsellerListFromDb(options: {
+  region: string;
+  weekDate?: string;
+  comparisonWeek?: string;
+}): Promise<DbListResult> {
+  const { region } = options;
+
+  // Resolve the latest week with a limit-1 query — regional_bestsellers is
+  // far past PostgREST's 1000-row default limit, so never scan it.
+  let weekDate = options.weekDate;
+  if (!weekDate) {
+    const { data, error } = await supabase
+      .from('regional_bestsellers')
+      .select('week_date')
+      .eq('region', region)
+      .order('week_date', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(`latest week query failed: ${error.message}`);
+    weekDate = (data?.[0] as { week_date?: string } | undefined)?.week_date;
+    if (!weekDate) throw new Error(`No bestseller data stored for region ${region}`);
+  }
+
+  const comparisonWeek = options.comparisonWeek ?? isoMinusDays(weekDate, 7);
+  const abaAuthoritative = comparisonWeek === isoMinusDays(weekDate, 7);
+
+  const currentRows = await fetchWeekRows(region, weekDate);
+  if (currentRows.length === 0) {
+    throw new Error(`No bestseller data stored for ${region} week ${weekDate}`);
+  }
+  const comparisonRows = await fetchWeekRows(region, comparisonWeek);
+
+  // Comparison lookups: rank by category|isbn, and presence by category.
+  const comparisonRank = new Map<string, number>();
+  for (const r of comparisonRows) {
+    comparisonRank.set(`${r.category ?? ''}|${r.isbn}`, r.rank);
+  }
+  const currentIsbnsByCategory = new Set(
+    currentRows.map((r) => `${r.category ?? ''}|${r.isbn}`)
+  );
+
+  const toBook = (r: DbListRow): BestsellerBook => {
+    const previousRank = abaAuthoritative
+      ? r.last_week_rank ?? undefined
+      : comparisonRank.get(`${r.category ?? ''}|${r.isbn}`);
+    return {
+      rank: r.rank,
+      title: r.title,
+      author: r.author,
+      publisher: r.publisher ?? '',
+      price: r.price ?? '',
+      isbn: r.isbn,
+      previousRank,
+      isNew: previousRank === undefined,
+      weeksOnList: r.weeks_on_list ?? undefined,
+    };
+  };
+
+  const byCategory = new Map<string, BestsellerBook[]>();
+  for (const r of currentRows) {
+    const cat = r.category ?? 'General';
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat)!.push(toBook(r));
+  }
+
+  // Books on the comparison list that are gone now.
+  for (const r of comparisonRows) {
+    const cat = r.category ?? 'General';
+    if (currentIsbnsByCategory.has(`${r.category ?? ''}|${r.isbn}`)) continue;
+    if (!byCategory.has(cat)) continue; // don't resurrect empty categories
+    byCategory.get(cat)!.push({
+      rank: r.rank,
+      title: r.title,
+      author: r.author,
+      publisher: r.publisher ?? '',
+      price: r.price ?? '',
+      isbn: r.isbn,
+      previousRank: r.rank,
+      wasDropped: true,
+      weeksOnList: r.weeks_on_list ?? undefined,
+    });
+  }
+
+  const categories = [...byCategory.entries()]
+    .sort(
+      (a, b) =>
+        displayOrder(a[0]) - displayOrder(b[0]) || a[0].localeCompare(b[0])
+    )
+    .map(([name, books]) => ({ name, books }));
+
+  return {
+    current: { title: `${region} Independent Bestsellers`, date: weekDate, categories },
+    weekDate,
+    comparisonWeek,
+  };
+}
