@@ -12,19 +12,16 @@ const parserMocks = vi.hoisted(() => ({
     if (category.toLowerCase().includes('teen')) return 'T';
     return 'A';
   }),
-  shouldFetchNewData: vi.fn(),
-  fetchHistoricalData: vi.fn(),
 }));
 
-vi.mock('@/utils/bestsellerParser', () => ({
-  BestsellerParser: {
-    fetchBestsellerData: parserMocks.fetchBestsellerData,
-    batchGetBookAudiences: parserMocks.batchGetBookAudiences,
-    getBookAudience: parserMocks.getBookAudience,
-    getDefaultAudience: parserMocks.getDefaultAudience,
-    shouldFetchNewData: parserMocks.shouldFetchNewData,
-    fetchHistoricalData: parserMocks.fetchHistoricalData,
-  },
+vi.mock('@/services/bestsellerApi', () => ({
+  fetchBestsellerListFromDb: parserMocks.fetchBestsellerData,
+}));
+
+vi.mock('@/services/bookDataService', () => ({
+  batchGetBookAudiences: parserMocks.batchGetBookAudiences,
+  getBookAudience: parserMocks.getBookAudience,
+  getDefaultAudience: parserMocks.getDefaultAudience,
 }));
 
 const toastMock = vi.hoisted(() => vi.fn());
@@ -124,13 +121,15 @@ describe('Index page audience batching', () => {
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    parserMocks.fetchBestsellerData.mockResolvedValue(sampleResponse);
+    parserMocks.fetchBestsellerData.mockResolvedValue({
+      ...sampleResponse,
+      weekDate: '2025-10-12',
+      comparisonWeek: '2025-10-05',
+    });
     parserMocks.batchGetBookAudiences.mockResolvedValue({
       '9780000000001': 'Fetched-A',
       '9780000000003': 'Fetched-C',
     });
-    parserMocks.shouldFetchNewData.mockResolvedValue(false);
-    parserMocks.fetchHistoricalData.mockResolvedValue(undefined);
     bookListDisplaySpy.mockClear();
     parserMocks.fetchBestsellerData.mockClear();
     parserMocks.batchGetBookAudiences.mockClear();

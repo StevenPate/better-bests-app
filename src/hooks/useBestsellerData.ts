@@ -2,15 +2,14 @@
  * useBestsellerData - Custom hook for fetching and managing bestseller list data
  *
  * Centralizes all data fetching logic for bestseller lists, including:
- * - Initial data fetch with smart caching
+ * - Reads ingested data from regional_bestsellers (never fetches from ABA)
  * - Comparison week management
- * - Background historical data fetching
  * - Refresh functionality
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
-import { BestsellerParser } from '@/utils/bestsellerParser';
+import { fetchBestsellerListFromDb } from '@/services/bestsellerApi';
 import { BestsellerList } from '@/types/bestseller';
 import { logger } from '@/lib/logger';
 import { FetchError, ErrorCode } from '@/lib/errors';
@@ -57,16 +56,18 @@ export function useBestsellerData(options: UseBestsellerDataOptions = {}): UseBe
     queryFn: async () => {
       logger.debug('[useBestsellerData] Fetching bestseller data for region:', currentRegion.abbreviation, 'comparison:', comparisonWeek || 'default');
 
-      const result = await BestsellerParser.fetchBestsellerData({
-        comparisonWeek: comparisonWeek || undefined,
+      // ABA v2 era: the browser reads only what Trigger.dev ingested into
+      // regional_bestsellers — no live fetching from ABA.
+      const result = await fetchBestsellerListFromDb({
         region: currentRegion.abbreviation,
+        comparisonWeek: comparisonWeek || undefined,
       });
 
-      if (!result) {
+      if (!result.current) {
         throw new FetchError(
           ErrorCode.DATA_FETCH_FAILED,
           { resource: 'bestseller_data', region: currentRegion.abbreviation, comparisonWeek },
-          'No data received from BestsellerParser'
+          'No bestseller data stored for region'
         );
       }
 
@@ -87,35 +88,6 @@ export function useBestsellerData(options: UseBestsellerDataOptions = {}): UseBe
     }
   }, [comparisonWeek, queryData?.date]);
 
-  // Background historical data fetch - ONCE per region per 24 hours
-  useEffect(() => {
-    const fetchHistoricalData = async () => {
-      try {
-        // Check localStorage to avoid repeated fetches
-        const cacheKey = `historical-fetched-${currentRegion.abbreviation}`;
-        const cachedTimestamp = localStorage.getItem(cacheKey);
-        const lastFetch = cachedTimestamp ? parseInt(cachedTimestamp) : 0;
-        const hoursSinceLastFetch = (Date.now() - lastFetch) / (1000 * 60 * 60);
-
-        // Only fetch if >24 hours since last fetch
-        if (hoursSinceLastFetch > 24) {
-          const needsRefresh = await BestsellerParser.shouldFetchNewData(currentRegion.abbreviation);
-          if (needsRefresh) {
-            logger.debug('[useBestsellerData] Fetching historical data in background for region:', currentRegion.abbreviation);
-            await BestsellerParser.fetchHistoricalData(currentRegion.abbreviation);
-            localStorage.setItem(cacheKey, Date.now().toString());
-          }
-        }
-      } catch (error) {
-        logger.error('[useBestsellerData] Error fetching historical data:', error);
-      }
-    };
-
-    if (queryData) {
-      fetchHistoricalData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRegion.abbreviation]); // Only run when region changes (queryData check is for safety, not a trigger)
 
   /**
    * Update comparison week and trigger refetch

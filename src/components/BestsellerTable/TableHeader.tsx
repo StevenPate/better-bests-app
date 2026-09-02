@@ -49,7 +49,11 @@ export const TableHeader: React.FC<TableHeaderProps> = ({
         </TableHead>
 
         {!isMobile && !isAudienceFiltered && <TableHead className="w-20">Change</TableHead>}
-        {!isMobile && <TableHead className="w-16">Weeks</TableHead>}
+        {!isMobile && (
+          <TableHead className="w-16" title="Total weeks on this list per the ABA, including weeks before this site began tracking">
+            Weeks
+          </TableHead>
+        )}
 
         {isPbnStaff && (
           <>

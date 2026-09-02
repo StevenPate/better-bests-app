@@ -6,7 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { BestsellerParser } from '@/utils/bestsellerParser';
+import { batchGetBookAudiences } from '@/services/bookDataService';
 import { logger } from '@/lib/logger';
 
 export type AudienceType = 'A' | 'T' | 'C'; // Adult, Teen, Children
@@ -41,7 +41,7 @@ export function useAudiencesByIsbn(isbns: string[], region: string = 'PNBA'): Us
       logger.debug('[useAudiencesByIsbn] Fetching audiences for', isbns.length, 'ISBNs');
 
       try {
-        const audienceRecord = await BestsellerParser.batchGetBookAudiences(isbns, region);
+        const audienceRecord = await batchGetBookAudiences(isbns, region);
         const audienceMap = new Map<string, AudienceType>();
 
         for (const [isbn, audience] of Object.entries(audienceRecord)) {

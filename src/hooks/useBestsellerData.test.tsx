@@ -6,7 +6,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { useBestsellerData } from './useBestsellerData';
 import { RegionProvider } from '@/contexts/RegionContext';
 import { ReactNode } from 'react';
-import { BestsellerParser } from '@/utils/bestsellerParser';
+import * as bestsellerApi from '@/services/bestsellerApi';
 
 const mockBestsellerData = {
   current: {
@@ -14,11 +14,8 @@ const mockBestsellerData = {
     date: '2024-11-06',
     categories: [],
   },
-  previous: {
-    title: 'Test Bestsellers',
-    date: '2024-10-30',
-    categories: [],
-  },
+  weekDate: '2024-11-06',
+  comparisonWeek: '2024-10-30',
 };
 
 const createWrapper = (initialPath = '/region/pnba') => {
@@ -42,10 +39,8 @@ describe('useBestsellerData - Multi-Region', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock fetchBestsellerData to return test data
-    fetchSpy = vi.spyOn(BestsellerParser, 'fetchBestsellerData').mockResolvedValue(mockBestsellerData);
-    // Mock shouldFetchNewData to prevent background fetches
-    vi.spyOn(BestsellerParser, 'shouldFetchNewData').mockResolvedValue(false);
+    // Mock the DB read path to return test data
+    fetchSpy = vi.spyOn(bestsellerApi, 'fetchBestsellerListFromDb').mockResolvedValue(mockBestsellerData);
   });
 
   it('should fetch data for PNBA region by default', async () => {

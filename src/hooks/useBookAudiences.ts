@@ -6,7 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { BestsellerParser } from '@/utils/bestsellerParser';
+import { batchGetBookAudiences } from '@/services/bookDataService';
 import { BestsellerList } from '@/types/bestseller';
 import { logger } from '@/lib/logger';
 
@@ -97,7 +97,7 @@ export function useBookAudiences(bestsellerData: BestsellerList | null, region: 
       // Batch fetch audiences from database
       let batchedAudiences: Record<string, string> = {};
       try {
-        batchedAudiences = await BestsellerParser.batchGetBookAudiences(isbns, region);
+        batchedAudiences = await batchGetBookAudiences(isbns, region);
         logger.debug('[useBookAudiences] Fetched', Object.keys(batchedAudiences).length, 'audiences from database');
       } catch (error) {
         logger.error('[useBookAudiences] Error fetching batched audiences:', error);
