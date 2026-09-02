@@ -25,6 +25,13 @@ function headerIndex(header: string[]): Record<string, number> {
     const key = h.trim().toLowerCase();
     if (key) idx[key] = i;
   });
+  // Observed glitch (MIBA 2026-08-19): a workbook shipped with the Rank
+  // header cell blank while the rank values were present. Column 0 is Rank
+  // in every ABA layout, so tolerate exactly that — an unlabeled first
+  // column with no competing claim. Everything else still fails loudly.
+  if (!("rank" in idx) && (header[0] ?? "").trim() === "") {
+    idx.rank = 0;
+  }
   for (const col of REQUIRED) {
     if (!(col in idx)) {
       throw new Error(`Sheet tab is missing required column: "${col}"`);

@@ -34,13 +34,15 @@ export const backfillGaps = task({
     }
 
     // List rows without score rows leave Awards/year-end silently
-    // inconsistent. recalcWeeks regenerates feeds only when a touched week
-    // is the current publication week, so historical backfill cannot
-    // overwrite the live feeds.
+    // inconsistent. Recalc every processed week, not just written ones — a
+    // week can hold rows from an earlier partial run whose scores are stale
+    // (seen live: MIBA 2026-08-19 landed after that week's recalc).
+    // recalcWeeks regenerates feeds only when a touched week is the current
+    // publication week, so historical backfill cannot overwrite live feeds.
     const touched = [...new Set(
       results.filter((x) => x.status === "written").map((x) => x.weekDate)
     )];
-    if (touched.length > 0) await recalcWeeks(touched);
+    await recalcWeeks(weeks);
 
     logger.info("Backfill complete", {
       weeks,

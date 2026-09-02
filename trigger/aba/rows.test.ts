@@ -78,6 +78,18 @@ describe("rowsFromCells", () => {
     expect(rowsFromCells(cells)[0].title).toBe("1984");
   });
 
+  it("tolerates a blank Rank header cell (MIBA 2026-08-19 glitch)", () => {
+    // One real workbook shipped Paperback Fiction with an unlabeled first
+    // column; the rank values themselves were present.
+    const cells = [
+      ["", "ISBN", "Title", "Author", "Publisher", "Price", "Last Week", "Weeks on List"],
+      ["1.0", "9.78059379843E12", "T", "A", "P", "28.0", "3.0", "5.0"],
+    ];
+    const rows = rowsFromCells(cells);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].rank).toBe(1);
+  });
+
   it("throws when the expected columns are missing", () => {
     expect(() =>
       rowsFromCells([
