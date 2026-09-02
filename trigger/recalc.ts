@@ -25,6 +25,9 @@ import { publicationWednesday } from "./aba/dates";
  * reach this helper, and a cleanup there could delete historical rows.
  */
 
+/** fetch_cache key recording which week the published feeds show. */
+export const FEED_WEEK_KEY = "aba_feeds_current_week";
+
 export interface ScoreSourceRow {
   isbn: string;
   region: string;
@@ -158,6 +161,14 @@ export async function recalcWeeks(weekDates: string[]): Promise<void> {
   // Feeds: current publication week only.
   if (weekDates.includes(currentWeek)) {
     await regenerateFeeds(db, currentWeek);
+    // Record which week the published feeds now show, so the Wednesday cron
+    // can detect a stale feed when the week rolls over with nothing written
+    // (ABA pre-stages sheets Tuesday evening, so Wednesday often ingests
+    // nothing new).
+    await db.from("fetch_cache").upsert(
+      { cache_key: FEED_WEEK_KEY, data: { week: currentWeek } },
+      { onConflict: "cache_key" }
+    );
   } else {
     logger.info("No feed regeneration — no touched week is the current one", {
       weekDates,

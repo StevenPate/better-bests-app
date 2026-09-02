@@ -4,7 +4,7 @@ import { REGION_SLUGS } from "./aba/maps";
 import { fetchRegionWeek } from "./aba/client";
 import { toDbRows, contentHash } from "./aba/persist";
 import { publicationWednesday, priorWednesdays } from "./aba/dates";
-import { recalcWeeks } from "./recalc";
+import { recalcWeeks, FEED_WEEK_KEY } from "./recalc";
 
 function supabase(): SupabaseClient {
   return createClient(
@@ -128,6 +128,7 @@ export const weeklyIngest = schedules.task({
   id: "aba-weekly-ingest",
   cron: { pattern: "*/20 8-16 * * 3", timezone: "America/Los_Angeles" },
   run: async () => {
+    const db = supabase();
     const weekDate = publicationWednesday();
     const results = [];
 
@@ -144,6 +145,28 @@ export const weeklyIngest = schedules.task({
     const written = results.filter((x) => x.status === "written");
     if (written.length > 0) {
       await recalcWeeks([weekDate]);
+    } else {
+      // The week's data can be fully pre-ingested (ABA pre-stages sheets
+      // Tuesday evening; manual backfills) so Wednesday writes nothing — but
+      // the published feeds may still show LAST week. Flip them once this
+      // week's rows exist and the recorded feed week is behind.
+      const haveData = results.some(
+        (x) => x.status === "already_ingested" || x.status === "unchanged"
+      );
+      if (haveData) {
+        const { data: fw } = await db
+          .from("fetch_cache")
+          .select("data")
+          .eq("cache_key", FEED_WEEK_KEY)
+          .maybeSingle();
+        const feedWeek = (fw?.data as { week?: string } | null)?.week;
+        if (feedWeek !== weekDate) {
+          logger.info("Feeds behind the current week — regenerating", {
+            feedWeek, weekDate,
+          });
+          await recalcWeeks([weekDate]);
+        }
+      }
     }
 
     logger.info("Weekly ingest tick complete", {
