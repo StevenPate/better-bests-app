@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { REGION_SLUGS } from "./aba/maps";
 import { fetchRegionWeek } from "./aba/client";
 import { toDbRows, contentHash } from "./aba/persist";
+import { publicationWednesday, priorWednesdays } from "./aba/dates";
 import { recalcWeeks } from "./recalc";
 
 function supabase(): SupabaseClient {
@@ -10,25 +11,6 @@ function supabase(): SupabaseClient {
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-}
-
-/** The Wednesday on or before the given date (UTC), as YYYY-MM-DD. */
-export function publicationWednesday(from: Date = new Date()): string {
-  const d = new Date(from);
-  const day = d.getUTCDay();
-  const diff = day >= 3 ? day - 3 : day + 4;
-  d.setUTCDate(d.getUTCDate() - diff);
-  return d.toISOString().slice(0, 10);
-}
-
-export function priorWednesdays(weekDate: string, count: number): string[] {
-  const out: string[] = [];
-  for (let i = 1; i <= count; i++) {
-    const d = new Date(`${weekDate}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 7 * i);
-    out.push(d.toISOString().slice(0, 10));
-  }
-  return out;
 }
 
 const cacheKeyFor = (dbRegion: string, weekDate: string) =>

@@ -7,7 +7,7 @@ import {
 } from "./feedGenerator";
 import { generateElsewhereFeeds } from "./generate-elsewhere-feeds";
 import { REGION_SLUGS } from "./aba/maps";
-import { publicationWednesday } from "./ingest-bestsellers";
+import { publicationWednesday } from "./aba/dates";
 
 /**
  * Scoring + feed regeneration, lifted from populate-regional-bestsellers so
