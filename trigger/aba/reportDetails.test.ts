@@ -57,6 +57,38 @@ describe("assertReportMatches", () => {
     );
   });
 
+  // ABA's first v2 workbook (2026-03-25) shipped a malformed date cell
+  // ("2026-46-3"). Content was verified genuine via weeks-on-list
+  // continuity, so an explicit opt-in may excuse an UNPARSEABLE date —
+  // never a parseable-but-different one, and the region must still match.
+  it("excuses an unparseable date only with the explicit opt-in", () => {
+    const cells = [["PNBA Bestsellers"], ["2026-46-3"]];
+    expect(() => assertReportMatches(cells, "PNBA", "2026-03-25")).toThrow(
+      /unparseable date/i
+    );
+    expect(() =>
+      assertReportMatches(cells, "PNBA", "2026-03-25", {
+        allowUnparseableReportDate: true,
+      })
+    ).not.toThrow();
+  });
+
+  it("still rejects a wrong region under the opt-in", () => {
+    expect(() =>
+      assertReportMatches([["PNBA Bestsellers"], ["2026-46-3"]], "SIBA", "2026-03-25", {
+        allowUnparseableReportDate: true,
+      })
+    ).toThrow(/region mismatch/i);
+  });
+
+  it("still rejects a parseable wrong date under the opt-in", () => {
+    expect(() =>
+      assertReportMatches(fixtureCells, "PNBA", "2026-08-19", {
+        allowUnparseableReportDate: true,
+      })
+    ).toThrow(/week date mismatch/i);
+  });
+
   // Our DB codes for California differ from ABA's slugs; the label carries
   // ABA's name. Verified live: every label is "{SLUG} Bestsellers".
   it("accepts NCIBA/SCIBA labels for the legacy California DB codes", () => {

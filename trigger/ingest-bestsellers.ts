@@ -34,7 +34,13 @@ export type IngestStatus = "written" | "unchanged" | "unpublished" | "already_in
 export const ingestRegionWeek = task({
   id: "ingest-region-week",
   retry: { maxAttempts: 3, factor: 2, minTimeoutInMs: 1000, maxTimeoutInMs: 30_000 },
-  run: async (payload: { slug: string; weekDate: string; skipIfIngested?: boolean }) => {
+  run: async (payload: {
+    slug: string;
+    weekDate: string;
+    skipIfIngested?: boolean;
+    /** Excuse an unparseable Report Details date — 2026-03-25 glitch only. */
+    allowUnparseableReportDate?: boolean;
+  }) => {
     const { slug, weekDate, skipIfIngested } = payload;
     const db = supabase();
     const dbRegion = REGION_SLUGS.find((r) => r.slug === slug)?.db;
@@ -52,7 +58,9 @@ export const ingestRegionWeek = task({
       }
     }
 
-    const week = await fetchRegionWeek(slug, weekDate);
+    const week = await fetchRegionWeek(slug, weekDate, {
+      allowUnparseableReportDate: payload.allowUnparseableReportDate,
+    });
     if (!week) {
       logger.info("Not published yet", { slug, weekDate });
       return { status: "unpublished" as IngestStatus, slug, weekDate, rows: 0 };

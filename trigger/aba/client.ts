@@ -42,6 +42,8 @@ export interface RegionWeek {
 interface Options {
   /** Test seam: transform the enumerated tab list before mapping. */
   _tabFilter?: (tabs: string[]) => string[];
+  /** Excuse an UNPARSEABLE Report Details date (2026-03-25 glitch). */
+  allowUnparseableReportDate?: boolean;
 }
 
 /**
@@ -75,7 +77,9 @@ export async function fetchRegionWeek(
   if (!reportTab) {
     throw new Error(`Workbook for ${slug} ${weekDate} has no Report Details tab`);
   }
-  assertReportMatches(tabs.get(reportTab)!, dbRegion, weekDate);
+  assertReportMatches(tabs.get(reportTab)!, dbRegion, weekDate, {
+    allowUnparseableReportDate: opts.allowUnparseableReportDate,
+  });
 
   // 2. Resolve every tab before converting anything, so an unknown tab
   //    aborts the region rather than half-ingesting it.

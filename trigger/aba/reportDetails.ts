@@ -41,27 +41,39 @@ export function parseReportDetails(cells: string[][]): ReportDetails {
 export function assertReportMatches(
   cells: string[][],
   expectedDbRegion: string,
-  expectedWeekDate: string
+  expectedWeekDate: string,
+  opts: { allowUnparseableReportDate?: boolean } = {}
 ): void {
-  const { label, weekDate } = parseReportDetails(cells);
-
-  if (weekDate !== expectedWeekDate) {
-    throw new Error(
-      `Report Details week date mismatch: sheet says ${weekDate}, expected ${expectedWeekDate}`
-    );
-  }
-
+  // Region check first — it must hold even when the date is excused.
   // The label uses ABA's region naming ("PNBA Bestsellers" — all nine labels
   // verified live 2026-08-31). For the two California regions our DB code
   // differs from ABA's slug, so compare against the ABA-side name.
+  const label = (cells[0]?.[0] ?? "").trim();
   const labelRegion = label.split(/\s+/)[0]?.toUpperCase() ?? "";
   const expected = expectedDbRegion.toUpperCase();
   const CALIFORNIA: Record<string, string> = { CALIBAN: "NCIBA", CALIBAS: "SCIBA" };
   const acceptable = CALIFORNIA[expected] ?? expected;
-
   if (labelRegion !== acceptable) {
     throw new Error(
       `Report Details region mismatch: sheet says "${label}", expected ${acceptable}`
+    );
+  }
+
+  let weekDate: string;
+  try {
+    weekDate = parseReportDetails(cells).weekDate;
+  } catch (e) {
+    // ABA's first v2 workbook (2026-03-25) carries a malformed date cell
+    // ("2026-46-3"). A garbage date can neither confirm nor deny the week,
+    // so an explicit opt-in may excuse it — after out-of-band content
+    // verification. A parseable date is never excused.
+    if (opts.allowUnparseableReportDate) return;
+    throw e;
+  }
+
+  if (weekDate !== expectedWeekDate) {
+    throw new Error(
+      `Report Details week date mismatch: sheet says ${weekDate}, expected ${expectedWeekDate}`
     );
   }
 }

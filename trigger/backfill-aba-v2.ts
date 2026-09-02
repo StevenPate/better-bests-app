@@ -19,13 +19,17 @@ export const GAP_WEEKS = [
 
 export const backfillGaps = task({
   id: "aba-backfill-gaps",
-  run: async (payload: { weeks?: string[] }) => {
+  run: async (payload: { weeks?: string[]; allowUnparseableReportDate?: boolean }) => {
     const weeks = payload.weeks ?? GAP_WEEKS;
     const results = [];
 
     for (const weekDate of weeks) {
       for (const { slug } of REGION_SLUGS) {
-        const r = await ingestRegionWeek.triggerAndWait({ slug, weekDate });
+        const r = await ingestRegionWeek.triggerAndWait({
+          slug,
+          weekDate,
+          allowUnparseableReportDate: payload.allowUnparseableReportDate,
+        });
         if (r.ok) results.push(r.output);
         else logger.error("Backfill failed", { slug, weekDate, error: r.error });
         // Be a good citizen toward Google.
