@@ -328,6 +328,10 @@ export async function fetchBestsellerListFromDb(options: {
     const previousRank = abaAuthoritative
       ? r.last_week_rank ?? undefined
       : comparisonRank.get(`${r.category ?? ''}|${r.isbn}`);
+    // ABA leaves BOTH momentum fields blank on untracked deep-list rows
+    // (e.g. Mass Market #11-15): that's unknown, not new. A genuine debut
+    // has a weeks-on-list value ("New / 1", "New / 143" for re-entries).
+    const tracked = r.weeks_on_list !== null;
     return {
       rank: r.rank,
       title: r.title,
@@ -336,7 +340,7 @@ export async function fetchBestsellerListFromDb(options: {
       price: r.price ?? '',
       isbn: r.isbn,
       previousRank,
-      isNew: previousRank === undefined,
+      isNew: previousRank === undefined && tracked,
       weeksOnList: r.weeks_on_list ?? undefined,
     };
   };

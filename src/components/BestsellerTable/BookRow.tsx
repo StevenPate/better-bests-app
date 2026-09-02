@@ -153,7 +153,7 @@ export const BookRow: React.FC<BookRowProps> = ({
       {/* Weeks on List Column (desktop only) */}
       {!isMobile && (
         <TableCell className="text-center">
-          <span className="text-sm font-medium">{book.weeksOnList || 1}</span>
+          <span className="text-sm font-medium">{book.weeksOnList ?? '—'}</span>
         </TableCell>
       )}
 

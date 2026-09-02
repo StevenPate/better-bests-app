@@ -743,7 +743,7 @@ describe('BestsellerTable', () => {
       expect(screen.getByText('5')).toBeInTheDocument();
     });
 
-    it('should show 1 week when weeksOnList is not provided', () => {
+    it('shows unknown weeks as a dash when weeksOnList is not provided', () => {
       const categoryNoWeeks: BestsellerCategory = {
         name: 'Test',
         books: [
@@ -762,9 +762,10 @@ describe('BestsellerTable', () => {
 
       renderWithRouter(<BestsellerTable category={categoryNoWeeks} />);
 
-      // Should default to 1
+      // Unknown stays unknown — ABA leaves weeks-on-list blank for
+      // untracked deep-list rows, and inferring "1" misreads them as debuts.
       const weeksCell = screen.getByText('Book One').closest('tr')?.querySelector('td:nth-child(4)');
-      expect(weeksCell?.textContent).toBe('1');
+      expect(weeksCell?.textContent).toBe('—');
     });
   });
 
@@ -824,8 +825,8 @@ describe('BestsellerTable', () => {
 
       renderWithRouter(<BestsellerTable category={categoryNoPrevRank} />);
 
-      // Should show "—" for no change
-      expect(screen.getByText('—')).toBeInTheDocument();
+      // Should show "—" for no change (and the weeks cell shows "—" too)
+      expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1);
     });
   });
 

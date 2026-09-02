@@ -87,14 +87,21 @@ export function composeBlurb(
 export interface PreviousWeekBook {
   isbn: string;
   rank: number;
+  /** List the rank belongs to — cross-listed books have one rank per list. */
+  category?: string | null;
 }
 
 export function computeLastRank(
   isbn: string,
-  previous: PreviousWeekBook[]
+  previous: PreviousWeekBook[],
+  category?: string | null
 ): string {
-  const match = previous.find((b) => b.isbn === isbn);
-  return match ? String(match.rank) : "NEW";
+  const candidates = previous.filter((b) => b.isbn === isbn);
+  if (candidates.length === 0) return "NEW";
+  const exact = category != null
+    ? candidates.find((b) => b.category === category)
+    : undefined;
+  return String((exact ?? candidates[0]).rank);
 }
 
 export interface CurrentBook {
@@ -187,7 +194,7 @@ export function assembleFeedJson(args: AssembleArgs): Feed {
 
     const rawDescription = args.descriptions[book.isbn] ?? "";
     const description = sanitizeDescription(rawDescription);
-    const last = computeLastRank(book.isbn, args.previousBooks);
+    const last = computeLastRank(book.isbn, args.previousBooks, book.category);
     const weeks = String(args.weeksOnList[book.isbn] ?? 0);
 
     const entry: FeedEntry = {

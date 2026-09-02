@@ -75,15 +75,29 @@ describe('fetchBestsellerListFromDb', () => {
     expect(book.isNew).toBe(false);
   });
 
-  it('marks a book new when ABA last_week_rank is null (default comparison)', async () => {
+  it('marks a book new when last_week_rank is null but weeks_on_list is tracked', async () => {
     mockState.queue = [
-      { data: [row({ last_week_rank: null })], error: null },
+      { data: [row({ last_week_rank: null, weeks_on_list: 1 })], error: null },
       { data: [], error: null },
     ];
     const result = await fetchBestsellerListFromDb({ region: 'PNBA', weekDate: '2026-09-02' });
     const book = result.current.categories[0].books[0];
     expect(book.previousRank).toBeUndefined();
     expect(book.isNew).toBe(true);
+  });
+
+  it('does NOT infer NEW when ABA left both momentum fields blank', async () => {
+    // Deep-list Mass Market rows (e.g. Dune at #13) ship with last-week AND
+    // weeks-on-list blank: unknown, not new. Official pages leave them blank.
+    mockState.queue = [
+      { data: [row({ last_week_rank: null, weeks_on_list: null })], error: null },
+      { data: [], error: null },
+    ];
+    const result = await fetchBestsellerListFromDb({ region: 'PNBA', weekDate: '2026-09-02' });
+    const book = result.current.categories[0].books[0];
+    expect(book.isNew).toBe(false);
+    expect(book.previousRank).toBeUndefined();
+    expect(book.weeksOnList).toBeUndefined();
   });
 
   it('diffs against stored rows for a custom comparison week', async () => {

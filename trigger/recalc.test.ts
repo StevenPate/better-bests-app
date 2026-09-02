@@ -32,6 +32,34 @@ describe("calculateScore", () => {
 });
 
 describe("buildScores", () => {
+  it("scores a cross-listed book exactly once, in its most specific list", () => {
+    // Storage keeps all list memberships; scoring must not double-count.
+    // CHILDREN'S INTEREST is a composite roll-up and always yields.
+    const rows = [
+      row({ isbn: "9781419788109", rank: 1, category: "EARLY & MIDDLE GRADE READERS" }),
+      row({ isbn: "9781419788109", rank: 1, category: "CHILDREN'S INTEREST" }),
+      row({ isbn: "9780000000001", rank: 2, category: "CHILDREN'S INTEREST" }),
+    ];
+    const scores = buildScores(rows);
+    const rowley = scores.filter((s) => s.isbn === "9781419788109");
+    expect(rowley).toHaveLength(1);
+    expect(rowley[0].category).toBe("EARLY & MIDDLE GRADE READERS");
+    // The composite-only book still scores, on the composite list.
+    expect(scores.some((s) => s.isbn === "9780000000001" && s.category === "CHILDREN'S INTEREST")).toBe(true);
+  });
+
+  it("computes list_size from the deduped rows, matching historical scoring", () => {
+    const rows = [
+      row({ isbn: "1111111111111", rank: 1, category: "CHILDREN'S TITLES" }),
+      row({ isbn: "1111111111111", rank: 4, category: "EARLY & MIDDLE GRADE READERS" }),
+      row({ isbn: "2222222222222", rank: 5, category: "EARLY & MIDDLE GRADE READERS" }),
+    ];
+    const scores = buildScores(rows);
+    const emg = scores.find((s) => s.category === "EARLY & MIDDLE GRADE READERS");
+    // Only one book scores under EMG (the other deduped into CT), so its
+    // list_size is 1 — same as when storage itself was deduped.
+    expect(emg!.list_size).toBe(1);
+  });
   it("computes list_size per category from the stored rows", () => {
     const rows = [
       row({ isbn: "1111111111111", rank: 1 }),
@@ -60,7 +88,7 @@ describe("feedInputsFromRows", () => {
       row({ isbn: "2222222222222", last_week_rank: null }),
     ];
     expect(feedInputsFromRows(rows).previousBooks).toEqual([
-      { isbn: "1111111111111", rank: 3 },
+      { isbn: "1111111111111", rank: 3, category: "HARDCOVER FICTION" },
     ]);
   });
 

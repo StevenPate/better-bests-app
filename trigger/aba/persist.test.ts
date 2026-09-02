@@ -50,39 +50,26 @@ describe("toDbRows", () => {
   });
 });
 
-describe("toDbRows dedup", () => {
-  // The DB enforces UNIQUE (region, isbn, week_date): one row per book per
-  // region-week. ABA lists the same book on several lists, so we keep the
-  // most specific one: CHILDREN'S INTEREST is a composite roll-up and only
-  // contributes books that appear on no other list.
+describe("toDbRows multi-list membership", () => {
+  // ABA lists the same book on several lists (Rowley Jefferson: EMG #1,
+  // Children's Titles #3, Children's Interest #1) and every list must
+  // display complete. Storage keeps ALL memberships; scoring dedupes
+  // separately (see recalc.test.ts) so each book still earns one score.
   const book = (isbn: string, rank: number) => ({
     rank, isbn, title: "T", author: "A", publisher: null, price: null,
     last_week_rank: null, weeks_on_list: null,
   });
 
-  it("keeps the specific-list row when a book is also on Childrens Interest", () => {
+  it("keeps every list membership for a cross-listed book", () => {
     const w = week();
-    w.byCategory.set("EARLY & MIDDLE GRADE READERS", [book("9780593809891", 3)]);
-    w.byCategory.set("CHILDREN'S INTEREST", [
-      book("9780593809891", 5),   // duplicate of the EMG book
-      book("9781339028019", 10),  // only on the composite list
-    ]);
-    const rows = toDbRows(w);
-    const kept = rows.filter((r) => r.isbn === "9780593809891");
-    expect(kept).toHaveLength(1);
-    expect(kept[0].category).toBe("EARLY & MIDDLE GRADE READERS");
-    expect(kept[0].rank).toBe(3);
-    // The composite-only book survives.
-    expect(rows.some((r) => r.isbn === "9781339028019" && r.category === "CHILDREN'S INTEREST")).toBe(true);
-  });
-
-  it("is deterministic when a book is on two specific lists", () => {
-    const w = week();
-    w.byCategory.set("CHILDREN'S TITLES", [book("9781419788109", 1)]);
     w.byCategory.set("EARLY & MIDDLE GRADE READERS", [book("9781419788109", 1)]);
+    w.byCategory.set("CHILDREN'S TITLES", [book("9781419788109", 3)]);
     const rows = toDbRows(w).filter((r) => r.isbn === "9781419788109");
-    expect(rows).toHaveLength(1);
-    expect(rows[0].category).toBe("CHILDREN'S TITLES"); // priority order
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => `${r.category}#${r.rank}`).sort()).toEqual([
+      "CHILDREN'S TITLES#3",
+      "EARLY & MIDDLE GRADE READERS#1",
+    ]);
   });
 });
 

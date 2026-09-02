@@ -7,6 +7,7 @@ import {
 } from "./feedGenerator";
 import { generateElsewhereFeeds } from "./generate-elsewhere-feeds";
 import { REGION_SLUGS } from "./aba/maps";
+import { priorityOf } from "./aba/persist";
 import { publicationWednesday } from "./aba/dates";
 
 /**
@@ -41,12 +42,25 @@ export function calculateScore(rank: number, listSize: number): number {
 }
 
 export function buildScores(rows: ScoreSourceRow[]) {
-  const categoryListSizes: Record<string, number> = {};
+  // Storage keeps every list membership; credit each book once, in its most
+  // specific list (composite CHILDREN'S INTEREST last). list_size counts the
+  // deduped rows so scores stay comparable with the historical
+  // one-row-per-book data.
+  const best = new Map<string, ScoreSourceRow>();
   for (const r of rows) {
+    const existing = best.get(r.isbn);
+    if (!existing || priorityOf(r.category || "General") < priorityOf(existing.category || "General")) {
+      best.set(r.isbn, r);
+    }
+  }
+  const deduped = [...best.values()];
+
+  const categoryListSizes: Record<string, number> = {};
+  for (const r of deduped) {
     const cat = r.category || "General";
     categoryListSizes[cat] = (categoryListSizes[cat] || 0) + 1;
   }
-  return rows.map((r) => {
+  return deduped.map((r) => {
     const cat = r.category || "General";
     const listSize = categoryListSizes[cat];
     return {
@@ -69,7 +83,7 @@ export function feedInputsFromRows(rows: ScoreSourceRow[]): {
   return {
     previousBooks: rows
       .filter((r) => r.last_week_rank !== null)
-      .map((r) => ({ isbn: r.isbn, rank: r.last_week_rank! })),
+      .map((r) => ({ isbn: r.isbn, rank: r.last_week_rank!, category: r.category })),
     weeksOnList: Object.fromEntries(
       rows
         .filter((r) => r.weeks_on_list !== null)

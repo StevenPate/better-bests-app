@@ -17,16 +17,16 @@ export interface DbRow {
 }
 
 /**
- * regional_bestsellers enforces UNIQUE (region, isbn, week_date): one row per
- * book per region-week — the model every downstream consumer (scoring without
- * double-counting, book detail, heat maps) assumes. ABA lists the same book
- * on several lists, so when flattening we keep the most specific one. The
- * old pipeline resolved this accidentally (last upsert won); this order is
- * deliberate: CHILDREN'S INTEREST is a composite roll-up of the other
- * children's lists and comes last, contributing only books that appear
- * nowhere else.
+ * Category specificity order, most specific first. CHILDREN'S INTEREST is a
+ * composite roll-up of the other children's lists and always comes last.
+ *
+ * Storage keeps EVERY list membership (official lists must display complete
+ * — a book can be EMG #1 and Children's Titles #3 simultaneously). This
+ * order is used by SCORING (trigger/recalc.ts) to credit each book exactly
+ * once per region-week, in its most specific list, preserving comparability
+ * with the historical one-score-per-book model.
  */
-const CATEGORY_PRIORITY = [
+export const CATEGORY_PRIORITY = [
   "HARDCOVER FICTION",
   "HARDCOVER NONFICTION",
   "TRADE PAPERBACK FICTION",
@@ -40,21 +40,15 @@ const CATEGORY_PRIORITY = [
   "CHILDREN'S INTEREST", // composite — always last
 ];
 
-function priorityOf(category: string): number {
+export function priorityOf(category: string): number {
   const i = CATEGORY_PRIORITY.indexOf(category);
   return i === -1 ? CATEGORY_PRIORITY.length : i;
 }
 
 export function toDbRows(week: RegionWeek): DbRow[] {
   const rows: DbRow[] = [];
-  const seen = new Map<string, number>(); // isbn -> index in rows
-  const orderedCategories = [...week.byCategory.entries()].sort(
-    (a, b) => priorityOf(a[0]) - priorityOf(b[0])
-  );
-  for (const [category, books] of orderedCategories) {
+  for (const [category, books] of week.byCategory) {
     for (const b of books) {
-      if (seen.has(b.isbn)) continue; // a more specific list already has it
-      seen.set(b.isbn, rows.length);
       rows.push({
         region: week.dbRegion,
         week_date: week.weekDate,

@@ -144,6 +144,24 @@ describe("composeBlurb", () => {
 });
 
 describe("computeLastRank", () => {
+  it("prefers a same-category match for cross-listed books", () => {
+    // A book can sit on two lists with different previous ranks (e.g.
+    // hardcover list #14 and a children's list #1). The section being
+    // rendered must get ITS list's rank.
+    const previous = [
+      { isbn: "9781419788109", rank: 3, category: "CHILDREN'S TITLES" },
+      { isbn: "9781419788109", rank: 1, category: "EARLY & MIDDLE GRADE READERS" },
+    ];
+    expect(computeLastRank("9781419788109", previous, "EARLY & MIDDLE GRADE READERS")).toBe("1");
+    expect(computeLastRank("9781419788109", previous, "CHILDREN'S TITLES")).toBe("3");
+  });
+
+  it("falls back to any match when no category is given or matched", () => {
+    const previous = [{ isbn: "9781419788109", rank: 3, category: "CHILDREN'S TITLES" }];
+    expect(computeLastRank("9781419788109", previous)).toBe("3");
+    expect(computeLastRank("9781419788109", previous, "YOUNG ADULT")).toBe("3");
+  });
+
   it("returns previous rank as string when ISBN found on previous week", () => {
     const previous = [
       { isbn: "9780000000001", rank: 3 },
