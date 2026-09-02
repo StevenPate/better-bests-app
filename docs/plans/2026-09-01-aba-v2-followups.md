@@ -97,12 +97,11 @@ scarcity. Real fixes, either/both:
 - **Add a Google Books API key** — wired 2026-09-01: the client reads
   `VITE_GOOGLE_BOOKS_API_KEY` (set in the gitignored `.env`; set it in the
   hosting provider's env too if builds run there).
-- **TODO: replace the current key with a new, dedicated one.** The interim
-  key is unrestricted (and was shared in plain text). In Google Cloud
-  console: create a fresh key for a dedicated project, restrict it to the
-  Books API and to the app's HTTP referrers (Vite bakes it into the public
-  bundle, so referrer restriction is the actual protection), update `.env`
-  and the hosting env, then delete the old key.
+- **Restricted key: DONE 2026-09-01.** A new key restricted to referrers
+  `betterbests.app/*` + `*.betterbests.app/*` is live in `.env` and the
+  hosting env; verified passing with site referrers and 403 without.
+  Remaining: delete the old interim key in the Cloud console. (Local dev is
+  keyless-by-referrer: the quota breaker + Supabase cache handle it.)
 - **Pre-warm the cache server-side:** a Trigger.dev step after weekly ingest
   that fetches book info for new ISBNs into `fetch_cache`
   (`google_books_info_*`), so browsers rarely need live fetches at all. The
