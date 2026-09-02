@@ -92,6 +92,20 @@ export class RequestQueue {
 export const requestQueue = new RequestQueue(MAX_CONCURRENT_REQUESTS);
 
 /**
+ * Build a Google Books volumes URL, using the configured API key when one
+ * exists. Keyless requests draw on Google's shared anonymous daily quota,
+ * which exhausts unpredictably (see quotaBreaker below); an owned key gets
+ * a dedicated, referrer-restrictable quota.
+ */
+export function googleBooksVolumesUrl(
+  isbn: string,
+  key: string | undefined = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY
+): string {
+  const base = `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`;
+  return key ? `${base}&key=${key}` : base;
+}
+
+/**
  * Circuit breaker for Google Books quota exhaustion.
  *
  * The app fetches keylessly, drawing on Google's shared anonymous daily

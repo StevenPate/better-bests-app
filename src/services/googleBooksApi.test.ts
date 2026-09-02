@@ -69,7 +69,7 @@ describe('fetchGoogleBooksCategory', () => {
 
     expect(result).toBe('Fiction');
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://www.googleapis.com/books/v1/volumes?q=isbn:9780743273565'
+      expect.stringContaining('https://www.googleapis.com/books/v1/volumes?q=isbn:9780743273565')
     );
   });
 

@@ -15,7 +15,7 @@ import { FetchError, ErrorCode, logError } from '@/lib/errors';
 import {
   bookInfoCache, categoryCache, coverCache, pubDateCache,
   requestQueue, fetchWithRetry,
-  getSupabaseCachedBookInfo, setSupabaseCachedBookInfo, quotaBreaker } from './googleBooksCache';
+  getSupabaseCachedBookInfo, setSupabaseCachedBookInfo, quotaBreaker, googleBooksVolumesUrl } from './googleBooksCache';
 
 interface GoogleBooksVolume {
   volumeInfo: {
@@ -109,7 +109,7 @@ export const fetchCachedBookInfo = async (isbn: string): Promise<CachedBookInfo>
   try {
     const bookInfo = await requestQueue.add(async () => {
       return await fetchWithRetry(async () => {
-        const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+        const response = await fetch(googleBooksVolumesUrl(isbn));
 
         if (!response.ok) {
           throw new FetchError(
@@ -281,7 +281,7 @@ export const fetchGoogleBooksCategoriesBatch = async (
  */
 export const fetchGoogleBooksInfo = async (isbn: string): Promise<GoogleBooksVolume['volumeInfo'] | null> => {
   try {
-    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    const response = await fetch(googleBooksVolumesUrl(isbn));
 
     if (!response.ok) {
       throw new FetchError(

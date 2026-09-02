@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { quotaBreaker, fetchWithRetry } from './googleBooksCache';
+import { quotaBreaker, fetchWithRetry, googleBooksVolumesUrl } from './googleBooksCache';
 
 // Reproduces the 2026-09-01 PDF hang: Google Books' anonymous daily quota
 // was exhausted, every uncached ISBN 429'd, and fetchWithRetry backed off
@@ -75,5 +75,20 @@ describe('fetchWithRetry under quota exhaustion', () => {
     await vi.runAllTimersAsync();
     await p2;
     expect(quotaBreaker.isOpen()).toBe(false);
+  });
+});
+
+describe('googleBooksVolumesUrl', () => {
+  it('appends the API key when one is configured', () => {
+    expect(googleBooksVolumesUrl('9780063511637', 'test-key')).toBe(
+      'https://www.googleapis.com/books/v1/volumes?q=isbn:9780063511637&key=test-key'
+    );
+  });
+
+  it('omits the key parameter when blank', () => {
+    // Note: passing undefined falls back to the env key by design.
+    expect(googleBooksVolumesUrl('9780063511637', '')).toBe(
+      'https://www.googleapis.com/books/v1/volumes?q=isbn:9780063511637'
+    );
   });
 });

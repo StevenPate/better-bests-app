@@ -94,8 +94,11 @@ froze "Generate PDF" for minutes. The breaker (three consecutive 429s → fail
 fast for 10 min, degrade to cached/"Unknown" genres) fixes the hang, not the
 scarcity. Real fixes, either/both:
 
-- **Add a Google Books API key** (free tier: 1,000 req/day per project,
-  raisable) so quota is owned, not shared.
+- **Add a Google Books API key** — DONE 2026-09-01: the client reads
+  `VITE_GOOGLE_BOOKS_API_KEY` (set in the gitignored `.env`; set it in the
+  hosting provider's env too if builds run there). Consider restricting the
+  key by HTTP referrer in Google Cloud console, since Vite bakes it into the
+  public bundle.
 - **Pre-warm the cache server-side:** a Trigger.dev step after weekly ingest
   that fetches book info for new ISBNs into `fetch_cache`
   (`google_books_info_*`), so browsers rarely need live fetches at all. The
