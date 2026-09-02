@@ -156,7 +156,7 @@ const Index = () => {
             </a>
             {' '}data provided by the American Booksellers Association (
             <a
-              href="https://www.bookweb.org/indiebound/bestsellers/regional"
+              href="https://www.indiebound.org/bestseller-list-v2"
               className="text-primary hover:text-primary/80 transition-colors"
               target="_blank"
               rel="noopener noreferrer"
