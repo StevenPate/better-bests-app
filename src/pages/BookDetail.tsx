@@ -405,7 +405,7 @@ const BookDetail = () => {
             )}
 
             {/* Performance Metrics */}
-            <BookPerformanceMetrics isbn={isbn} year={2025} />
+            <BookPerformanceMetrics isbn={isbn} year={new Date().getFullYear()} />
 
             {/* Regional Performance Heat Map */}
             <RegionalHeatMap isbn={isbn} />

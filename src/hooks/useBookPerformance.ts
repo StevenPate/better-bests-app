@@ -46,7 +46,7 @@ async function fetchBookPerformance(
  * @param year - Year for metrics (defaults to 2025)
  * @returns Query result with performance metrics
  */
-export function useBookPerformance(isbn: string, year: number = 2025) {
+export function useBookPerformance(isbn: string, year: number = new Date().getFullYear()) {
   return useQuery({
     queryKey: ['bookPerformance', isbn, year],
     queryFn: () => fetchBookPerformance(isbn, year),

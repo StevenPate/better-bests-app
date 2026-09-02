@@ -41,7 +41,7 @@ async function fetchRegionalPerformance(
  * @param year - Year for metrics (defaults to 2025)
  * @returns Query result with regional performance array
  */
-export function useBookRegionalPerformance(isbn: string, year: number = 2025) {
+export function useBookRegionalPerformance(isbn: string, year: number = new Date().getFullYear()) {
   return useQuery({
     queryKey: ['bookRegionalPerformance', isbn, year],
     queryFn: () => fetchRegionalPerformance(isbn, year),

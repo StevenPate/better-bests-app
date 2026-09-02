@@ -9,7 +9,7 @@ interface BookPerformanceMetricsProps {
   year?: number;
 }
 
-export function BookPerformanceMetrics({ isbn, year = 2025 }: BookPerformanceMetricsProps) {
+export function BookPerformanceMetrics({ isbn, year = new Date().getFullYear() }: BookPerformanceMetricsProps) {
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useBookPerformance(isbn, year);
   const { data: regional, isLoading: regionalLoading } = useBookRegionalPerformance(isbn, year);
 
