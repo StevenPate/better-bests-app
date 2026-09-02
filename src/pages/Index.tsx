@@ -134,10 +134,10 @@ const Index = () => {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               Better Bestsellers
             </h1>
-            <Link to="/review/2025">
+            <Link to="/review/2026">
               <Badge variant="secondary" className="gap-1 hover:bg-secondary/80 transition-colors cursor-pointer">
                 <Sparkles className="w-3 h-3" />
-                2025 Year in Review
+                2026 Year in Review
               </Badge>
             </Link>
           </div>
