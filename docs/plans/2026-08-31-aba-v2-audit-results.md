@@ -39,7 +39,30 @@ MASS MARKET (and some into YOUNG ADULT), so those slots hold a different
 book than the archive's true Mass Market list. This is the same defect the
 partial-unique-index pre-check quantified (~4,300 colliding slots).
 
-## Open decision: repair the 17 drift weeks?
+## Decision: repaired (2026-09-01)
+
+The drift-week repair below was approved and executed the same day. All 16
+reachable drift weeks (04-01 → 08-05) were re-ingested through the new
+pipeline and rescored; the first attempt was canceled mid-run by a dev-server
+connection loss and healed cleanly on re-run (hash-gated idempotency working
+as designed).
+
+**2026-03-25 special case:** ABA's first v2 workbook carries a malformed
+Report Details date ("2026-46-3"), which the week-shift guard rightly
+refused — this is why the audit skipped that week. Its content was verified
+genuine out-of-band (weeks-on-list continuity vs. the clean 04-01 week:
+every overlapping book exactly +1), then ingested with an explicit
+`allowUnparseableReportDate` opt-in that keeps the region check and still
+rejects any parseable-but-different date.
+
+**End state: every week from 2026-03-25 through 2026-09-02 (24 weeks) is
+new-pipeline clean** — 9 regions, ~1,220 rows/week, `last_week_rank` /
+`weeks_on_list` populated, `weekly_scores` recomputed to match. Weeks before
+2026-03-25 remain as-is permanently (no external source exists). Feeds were
+untouched by the repair. The `*_backup_weekshift_20260805` tables are now
+safe to drop whenever convenient.
+
+## The original open decision (for the record)
 
 The archive covers 2026-03-25 → 2026-07-29, so those 17 weeks **could** be
 fully re-ingested through the new pipeline, which would:
