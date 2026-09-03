@@ -6,10 +6,12 @@ import { Sparkles } from 'lucide-react';
 interface FrontlistToggleProps {
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
+  /** Review year; the frontlist window is this year and the one before. */
+  year: number;
   isLoading?: boolean;
 }
 
-export function FrontlistToggle({ enabled, onToggle, isLoading }: FrontlistToggleProps) {
+export function FrontlistToggle({ enabled, onToggle, year, isLoading }: FrontlistToggleProps) {
   return (
     <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-muted/30 border border-border/50">
       <div className="flex items-center gap-2">
@@ -28,7 +30,7 @@ export function FrontlistToggle({ enabled, onToggle, isLoading }: FrontlistToggl
 
       {enabled && (
         <Badge variant="secondary" className="text-xs">
-          2024-2025
+          {year - 1}-{year}
         </Badge>
       )}
 

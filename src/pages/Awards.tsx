@@ -46,7 +46,8 @@ const REGIONS = [
   { code: 'SIBA', name: 'Southern' },
 ];
 
-const FRONTLIST_YEARS = [new Date().getFullYear() - 1, new Date().getFullYear()];
+/** Frontlist window for a review year: books published that year or the year before. */
+const frontlistYearsFor = (year: number) => [year - 1, year];
 
 function LoadingSkeleton() {
   return (
@@ -101,16 +102,18 @@ function filterBooks(
   books: BookRanking[],
   frontlistEnabled: boolean,
   publicationYears: Map<string, { publishedYear: number | null }>,
+  year: number,
   limit: number = 10
 ): BookRanking[] {
   let filtered = books;
 
   // Apply frontlist filter
   if (frontlistEnabled) {
+    const frontlistYears = frontlistYearsFor(year);
     filtered = filtered.filter((book) => {
       const pubInfo = publicationYears.get(book.isbn);
       if (!pubInfo?.publishedYear) return false;
-      return FRONTLIST_YEARS.includes(pubInfo.publishedYear);
+      return frontlistYears.includes(pubInfo.publishedYear);
     });
   }
 
@@ -173,7 +176,7 @@ function CategoryContent({
 
           {REGIONS.map((region) => {
             const regionalData = mostRegionalByRegion[region.code] || [];
-            const filteredData = filterBooks(regionalData, frontlistEnabled, publicationYears);
+            const filteredData = filterBooks(regionalData, frontlistEnabled, publicationYears, year);
 
             return (
               <TabsContent key={region.code} value={region.code} className="space-y-6">
@@ -222,7 +225,7 @@ function CategoryContent({
 
           {REGIONS.map((region) => {
             const regionalData = regionalTop10sByRegion[region.code] || [];
-            const filteredData = filterBooks(regionalData, frontlistEnabled, publicationYears);
+            const filteredData = filterBooks(regionalData, frontlistEnabled, publicationYears, year);
 
             return (
               <TabsContent key={region.code} value={region.code} className="space-y-6">
@@ -254,7 +257,7 @@ function CategoryContent({
 
   if (category === 'most_national') {
     const filteredNational = mostNational
-      ? filterBooks(mostNational, frontlistEnabled, publicationYears, 20)
+      ? filterBooks(mostNational, frontlistEnabled, publicationYears, year, 20)
       : [];
 
     return (
@@ -281,7 +284,7 @@ function CategoryContent({
 
   if (category === 'most_efficient') {
     const filteredEfficient = mostEfficient
-      ? filterBooks(mostEfficient, frontlistEnabled, publicationYears, 20)
+      ? filterBooks(mostEfficient, frontlistEnabled, publicationYears, year, 20)
       : [];
 
     return (
@@ -509,6 +512,7 @@ export default function Awards() {
             <FrontlistToggle
               enabled={frontlistEnabled}
               onToggle={setFrontlistEnabled}
+              year={year}
               isLoading={pubYearsLoading}
             />
           </div>
