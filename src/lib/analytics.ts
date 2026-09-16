@@ -8,7 +8,7 @@ type AnalyticsEvent =
   | {
       name: 'pdf_download';
       props: {
-        format: 'all' | 'adds_drops';
+        format: 'all' | 'adds_drops' | 'pbn_display';
         audience: 'adult' | 'teen' | 'children' | 'all';
       };
     }

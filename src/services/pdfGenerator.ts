@@ -19,13 +19,17 @@
 import jsPDF from 'jspdf';
 import { BestsellerList } from '@/types/bestseller';
 import { fetchGoogleBooksCategoriesBatch } from './googleBooksApi';
+import { collectPbnDisplaySections } from '@/utils/pbnDisplay';
 import { logger } from '@/lib/logger';
 import { PdfError, logError, wrapError } from '@/lib/errors';
 import { trackEvent } from '@/lib/analytics';
 
+export type PDFExportMode = 'all' | 'adds-drops' | 'pbn-display';
+
 export interface PDFGenerationOptions {
   region?: string; // Region abbreviation (e.g., 'PNBA', 'SIBA') - defaults to 'PNBA'
-  includeAllBooks: boolean; // true = all books, false = adds/drops only
+  includeAllBooks?: boolean; // legacy switch: true = all books, false = adds/drops only
+  mode?: PDFExportMode; // wins over includeAllBooks when provided
   bestsellerData: BestsellerList;
   bookAudiences: Record<string, string>; // ISBN -> audience (A/T/C)
   posChecked: Record<string, boolean>; // ISBN -> checked state
@@ -343,6 +347,81 @@ const generateAddsDropsPDF = async (
 };
 
 /**
+ * Generate PDF for the PBN Display: the store-display category set at print
+ * depth (adult lists top 15, children's/YA lists top 10), with adds and
+ * drops computed against each category's display cutoff.
+ */
+const generatePbnDisplayPDF = async (
+  doc: jsPDF,
+  options: PDFGenerationOptions,
+  googleBooksCategories: Record<string, string>
+): Promise<void> => {
+  const { region = 'PNBA', bestsellerData, posChecked, shelfChecked } = options;
+  const date = bestsellerData.date || 'Current Week';
+  const currentPageNum = { value: 1 };
+  const sections = collectPbnDisplaySections(bestsellerData);
+
+  let yPosition = 20;
+
+  doc.setFontSize(14);
+  doc.text(`${region} PBN Display - ${date}`, 20, yPosition);
+  yPosition += 12;
+
+  for (const section of sections) {
+    // Keep the category header with at least a few rows of its content
+    if (yPosition > 240) {
+      addFooter(doc, date, currentPageNum.value);
+      doc.addPage();
+      currentPageNum.value++;
+      yPosition = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${section.name} (top ${section.cutoff})`, 20, yPosition);
+    yPosition += 8;
+
+    if (section.adds.length === 0 && section.drops.length === 0) {
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.text('No changes.', 20, yPosition);
+      yPosition += 10;
+      continue;
+    }
+
+    for (const [label, books] of [
+      ['Adds', section.adds],
+      ['Drops', section.drops],
+    ] as const) {
+      if (books.length === 0) continue;
+
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text(label, 20, yPosition);
+      yPosition += 7;
+
+      yPosition = renderTableHeaders(doc, yPosition);
+      doc.setFont(undefined, 'normal');
+      yPosition = await renderBookSection(
+        doc,
+        books.map(book => ({ ...book, listName: section.name })),
+        googleBooksCategories,
+        posChecked,
+        shelfChecked,
+        date,
+        currentPageNum,
+        yPosition
+      );
+      yPosition += 4;
+    }
+
+    yPosition += 4;
+  }
+
+  addFooter(doc, date, currentPageNum.value);
+};
+
+/**
  * Generate and download a formatted PDF report for bestseller lists
  *
  * Creates a professional multi-page PDF with:
@@ -437,8 +516,13 @@ export const generateBestsellerPDF = async (options: PDFGenerationOptions): Prom
       logError('pdfGenerator', progressError, { operation: 'onProgress', stage: 'generating' });
     }
 
-    if (options.includeAllBooks) {
+    const mode: PDFExportMode =
+      options.mode ?? (options.includeAllBooks ? 'all' : 'adds-drops');
+
+    if (mode === 'all') {
       await generateAllBooksPDF(doc, options, googleBooksCategories);
+    } else if (mode === 'pbn-display') {
+      await generatePbnDisplayPDF(doc, options, googleBooksCategories);
     } else {
       await generateAddsDropsPDF(doc, options, googleBooksCategories);
     }
@@ -455,9 +539,12 @@ export const generateBestsellerPDF = async (options: PDFGenerationOptions): Prom
 
     // Phase 3: Save (90-100%)
     const regionPrefix = (options.region || 'PNBA').toUpperCase();
-    const filename = options.includeAllBooks
-      ? `${regionPrefix}-bestsellers-all.pdf`
-      : `${regionPrefix}-bestsellers-adds-drops.pdf`;
+    const filename =
+      mode === 'all'
+        ? `${regionPrefix}-bestsellers-all.pdf`
+        : mode === 'pbn-display'
+          ? `${regionPrefix}-pbn-display.pdf`
+          : `${regionPrefix}-bestsellers-adds-drops.pdf`;
 
     // Track PDF download
     const uniqueAudiences = new Set(Object.values(options.bookAudiences));
@@ -470,7 +557,7 @@ export const generateBestsellerPDF = async (options: PDFGenerationOptions): Prom
     }
 
     trackEvent('pdf_download', {
-      format: options.includeAllBooks ? 'all' : 'adds_drops',
+      format: mode === 'all' ? 'all' : mode === 'pbn-display' ? 'pbn_display' : 'adds_drops',
       audience
     });
 

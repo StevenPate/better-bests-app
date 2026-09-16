@@ -42,7 +42,7 @@ export const ExportActions = ({ region, bestsellerData, bookAudiences, isPbnStaf
     });
   };
 
-  const handlePDFGeneration = async (includeAllBooks: boolean) => {
+  const handlePDFGeneration = async (mode: 'all' | 'adds-drops' | 'pbn-display') => {
     if (!bestsellerData) return;
 
     setPdfGenerating(true);
@@ -57,7 +57,7 @@ export const ExportActions = ({ region, bestsellerData, bookAudiences, isPbnStaf
 
       const filename = await generateBestsellerPDF({
         region,
-        includeAllBooks,
+        mode,
         bestsellerData,
         bookAudiences,
         posChecked,
@@ -125,7 +125,7 @@ export const ExportActions = ({ region, bestsellerData, bookAudiences, isPbnStaf
         ISBNs
       </Button>
       <Button
-        onClick={async () => await handlePDFGeneration(true)}
+        onClick={async () => await handlePDFGeneration('all')}
         variant="outline"
         size="sm"
         className="gap-2 w-full justify-start"
@@ -137,7 +137,7 @@ export const ExportActions = ({ region, bestsellerData, bookAudiences, isPbnStaf
         {pdfGenerating ? 'Generating PDF' : 'PDF (all)'}
       </Button>
       <Button
-        onClick={async () => await handlePDFGeneration(false)}
+        onClick={async () => await handlePDFGeneration('adds-drops')}
         variant="outline"
         size="sm"
         className="gap-2 w-full justify-start"
@@ -147,6 +147,18 @@ export const ExportActions = ({ region, bestsellerData, bookAudiences, isPbnStaf
       >
         <FileText className="w-4 h-4" />
         {pdfGenerating ? 'Generating PDF' : 'PDF (adds/drops)'}
+      </Button>
+      <Button
+        onClick={async () => await handlePDFGeneration('pbn-display')}
+        variant="outline"
+        size="sm"
+        className="gap-2 w-full justify-start"
+        disabled={exportsDisabled}
+        aria-label="Generate PBN Display PDF: adds and drops at store display cutoffs"
+        title="Adds/drops for the store displays: adult lists top 15, children's lists top 10"
+      >
+        <FileText className="w-4 h-4" />
+        {pdfGenerating ? 'Generating PDF' : 'PDF (PBN display)'}
       </Button>
       <Select onValueChange={(value) => handleCSVExport(value as CSVExportType)} disabled={exportsDisabled}>
         <SelectTrigger className="w-full" aria-label="Export as CSV">

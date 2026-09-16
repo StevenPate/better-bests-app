@@ -384,6 +384,94 @@ describe('generateBestsellerPDF', () => {
     });
   });
 
+  describe('PBN Display mode', () => {
+    const makeDisplayList = () =>
+      makeList([
+        {
+          name: "CHILDREN'S ILLUSTRATED",
+          books: [makeBook({ isbn: '9780000000901', title: 'Illustrated Debut', isNew: true })],
+        },
+        {
+          name: 'EARLY & MIDDLE GRADE READERS',
+          books: [
+            makeBook({ isbn: '9780000000001', rank: 9, previousRank: 12, title: 'Climber' }),
+            makeBook({ isbn: '9780000000003', rank: 5, previousRank: 4, title: 'Steady' }),
+            makeBook({ isbn: '9780000000004', rank: 12, previousRank: 8, title: 'Slipped' }),
+          ],
+        },
+      ]);
+
+    it('produces a category-organized PDF at display cutoffs', async () => {
+      mockBatchFetch.mockResolvedValue({});
+
+      const filename = await generateBestsellerPDF({
+        mode: 'pbn-display',
+        bestsellerData: makeDisplayList(),
+        bookAudiences: {},
+        posChecked: {},
+        shelfChecked: {},
+      });
+
+      expect(filename).toBe('PNBA-pbn-display.pdf');
+
+      const doc = getLastDoc();
+      const textCalls = doc.text.mock.calls.map((call: unknown[]) => call[0]);
+
+      expect(doc.save).toHaveBeenCalledWith('PNBA-pbn-display.pdf');
+      expect(textCalls).toContain('EARLY & MIDDLE GRADE READERS (top 10)');
+      expect(textCalls).toContain('Climber');
+      expect(textCalls).toContain('Slipped');
+      expect(textCalls).not.toContain('Steady');
+      // Excluded category never renders
+      expect(textCalls).not.toContain("CHILDREN'S ILLUSTRATED (top 10)");
+      expect(textCalls).not.toContain('Illustrated Debut');
+
+      expect(analytics.trackEvent).toHaveBeenCalledWith('pdf_download', {
+        format: 'pbn_display',
+        audience: 'all',
+      });
+    });
+
+    it('titles the document PBN Display with the week date', async () => {
+      mockBatchFetch.mockResolvedValue({});
+
+      await generateBestsellerPDF({
+        mode: 'pbn-display',
+        bestsellerData: makeDisplayList(),
+        bookAudiences: {},
+        posChecked: {},
+        shelfChecked: {},
+      });
+
+      const doc = getLastDoc();
+      expect(doc.text).toHaveBeenCalledWith('PNBA PBN Display - 2025-10-01', 20, expect.any(Number));
+    });
+
+    it('prints an empty state for categories with no changes', async () => {
+      mockBatchFetch.mockResolvedValue({});
+
+      const bestsellerData = makeList([
+        {
+          name: 'HARDCOVER FICTION',
+          books: [makeBook({ isbn: '9780000000501', rank: 2, previousRank: 3, title: 'Steady HC' })],
+        },
+      ]);
+
+      await generateBestsellerPDF({
+        mode: 'pbn-display',
+        bestsellerData,
+        bookAudiences: {},
+        posChecked: {},
+        shelfChecked: {},
+      });
+
+      const doc = getLastDoc();
+      const textCalls = doc.text.mock.calls.map((call: unknown[]) => call[0]);
+      expect(textCalls).toContain('HARDCOVER FICTION (top 15)');
+      expect(textCalls).toContain('No changes.');
+    });
+  });
+
   describe('analytics tracking', () => {
     beforeEach(() => {
       vi.clearAllMocks();
