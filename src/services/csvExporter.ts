@@ -41,6 +41,24 @@ const formatBookAsCSVLine = (book: {
 };
 
 /**
+ * Drop repeat appearances of the same book. ABA lists the same title in
+ * several categories (especially the children's lists), but the CSV feeds a
+ * flat retailer import, so each book should appear once. Books are keyed by
+ * ISBN, falling back to title|author when the ISBN is missing.
+ */
+const dedupeBooks = <T extends {isbn?: string; title: string; author: string}>(
+  books: T[]
+): T[] => {
+  const seen = new Set<string>();
+  return books.filter(book => {
+    const key = book.isbn || `${book.title}|${book.author}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+/**
  * Get current date in YYYYMMDD format for filename
  */
 const getDateString = (): string => {
@@ -108,6 +126,8 @@ export const generateBestsellerCSV = (options: CSVExportOptions): CSVExportResul
         filename = `${regionPrefix}bs_drops_${dateStr}.csv`;
         break;
     }
+
+    books = dedupeBooks(books);
 
     // Format each book as CSV line
     books.forEach(book => {

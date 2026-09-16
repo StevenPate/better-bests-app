@@ -247,6 +247,125 @@ describe('csvExporter', () => {
       });
     });
 
+    describe('deduplication', () => {
+      const bookInTwoCategories = {
+        rank: 1,
+        title: 'Goodnight Moon',
+        author: 'Margaret Wise Brown',
+        publisher: 'Harper',
+        isbn: '9780694003617',
+        price: '$10.99',
+        isNew: true,
+        wasDropped: false,
+      };
+
+      beforeEach(() => {
+        mockBestsellerData.categories.push(
+          {
+            name: "Children's Illustrated",
+            books: [{ ...bookInTwoCategories }],
+          },
+          {
+            name: "Children's Titles",
+            books: [{ ...bookInTwoCategories, rank: 13 }],
+          }
+        );
+      });
+
+      it('should export a book on multiple lists only once', () => {
+        const result = generateBestsellerCSV({
+          type: 'adds_no_drops',
+          data: mockBestsellerData,
+        });
+
+        const matching = result.content
+          .split('\n')
+          .filter(line => line.startsWith('9780694003617'));
+        expect(matching).toHaveLength(1);
+      });
+
+      it('should count deduplicated books, not raw rows', () => {
+        const result = generateBestsellerCSV({
+          type: 'adds_no_drops',
+          data: mockBestsellerData,
+        });
+
+        // 4 unique non-dropped books from base data + 1 deduped children's book
+        expect(result.bookCount).toBe(5);
+        expect(result.content.split('\n')).toHaveLength(5);
+      });
+
+      it('should dedupe adds exports', () => {
+        const result = generateBestsellerCSV({
+          type: 'adds',
+          data: mockBestsellerData,
+        });
+
+        const matching = result.content
+          .split('\n')
+          .filter(line => line.startsWith('9780694003617'));
+        expect(matching).toHaveLength(1);
+      });
+
+      it('should dedupe drops exports', () => {
+        mockBestsellerData.categories.push({
+          name: "Children's Series Titles",
+          books: [{ ...bookInTwoCategories, wasDropped: true, isNew: false }],
+        });
+        mockBestsellerData.categories.push({
+          name: "Children's Interest",
+          books: [{ ...bookInTwoCategories, wasDropped: true, isNew: false }],
+        });
+
+        const result = generateBestsellerCSV({
+          type: 'drops',
+          data: mockBestsellerData,
+        });
+
+        const matching = result.content
+          .split('\n')
+          .filter(line => line.startsWith('9780694003617'));
+        expect(matching).toHaveLength(1);
+      });
+
+      it('should keep distinct books that lack ISBNs', () => {
+        mockBestsellerData.categories.push({
+          name: 'No ISBN Category',
+          books: [
+            {
+              rank: 1,
+              title: 'Mystery Book A',
+              author: 'Author A',
+              publisher: '',
+              isbn: '',
+              price: '',
+              isNew: true,
+              wasDropped: false,
+            },
+            {
+              rank: 2,
+              title: 'Mystery Book B',
+              author: 'Author B',
+              publisher: '',
+              isbn: '',
+              price: '',
+              isNew: true,
+              wasDropped: false,
+            },
+          ],
+        });
+
+        const result = generateBestsellerCSV({
+          type: 'adds',
+          data: mockBestsellerData,
+        });
+
+        const lines = result.content.split('\n');
+        expect(lines.some(line => line.includes('Mystery Book A'))).toBe(true);
+        expect(lines.some(line => line.includes('Mystery Book B'))).toBe(true);
+      });
+    });
+
     describe('CSV format', () => {
       it('should format book data correctly', () => {
         const result = generateBestsellerCSV({
