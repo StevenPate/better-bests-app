@@ -780,17 +780,27 @@ export const ipcBackfill = task({
 Run: `npx tsc -p tsconfig.json --noEmit 2>&1 | grep -i "ipc\|ingest-ipc"; npx vitest run trigger/`
 Expected: no type errors in the new files; all trigger tests pass.
 
-**Step 3: Verify in dev**
+**Step 3: Verify in dev — DO THIS AFTER TASK 5**
 
-Run `npx trigger.dev@latest dev`, then from the Trigger.dev dashboard Test page run `ingest-ipc-week` with `{ "weekDate": "2026-09-02" }`.
+> **Ordering:** this step writes a real IPC week into `regional_bestsellers`.
+> Task 5's ABA allowlist must be merged first, or that single week leaks into
+> Elsewhere and Unique Books exactly as a full backfill would — just quieter.
+> Task 5 touches no database and needs no credentials, so do it first and come
+> back. (Task 7 carries the same prerequisite for the same reason.)
+
+Run `npx trigger.dev@latest dev`, then from the Trigger.dev dashboard Test page run `ingest-ipc-week` with `{ "weekDate": "2026-09-23" }` (the current publication Wednesday; `2026-09-02` also works).
 Expected: status `written`, 80 rows. Then verify:
 
 ```sql
 select category, count(*), min(rank), max(rank)
-from regional_bestsellers where region = 'IPC' and week_date = '2026-09-02'
+from regional_bestsellers where region = 'IPC' and week_date = '2026-09-23'
 group by category;
 -- FICTION 40 1 40 / NONFICTION 40 1 40
 ```
+
+Re-running the same test immediately should return `unchanged` (the hash gate),
+and re-running with `{"weekDate": "2026-07-01"}` should return `unpublished`
+(a real CSV-less week) rather than erroring.
 
 **Step 4: Commit**
 
