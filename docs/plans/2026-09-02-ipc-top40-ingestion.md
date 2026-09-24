@@ -1000,10 +1000,11 @@ export default function IndiePress() {
 }
 ```
 
-Notes for the implementer:
-- Verify `filter`/`audienceFilter` neutral values by reading `src/hooks/useFilters.ts` defaults; use whatever value means "show everything".
-- Verify the date-formatting helper name in `src/utils/dateUtils.ts` and match what `Index.tsx` uses for the list date.
-- The page must render OUTSIDE the `/region/:region` layout (no region selector). If `Layout` provides the site chrome (header/nav), check how `/about` gets chrome and mirror it.
+Notes for the implementer — all three resolved during execution:
+- Neutral filter values are `'all'` for both `filter` and `audienceFilter` (`matchesAddDropFilter` in `src/utils/bookFilters.ts` short-circuits on it).
+- **There is no `formatDisplayDate`.** `src/utils/dateUtils.ts` exports a `DateUtils` class with no display formatter, and `Index.tsx` just renders `bestsellerData.date` raw. The page formats `weekDate` locally with `toLocaleDateString`, pinning to local midnight first — `new Date('2026-09-23')` is UTC midnight and renders as the 22nd anywhere west of Greenwich.
+- Chrome: `/about` sits outside `Layout` and builds its own header (logo home-link + `ThemeToggle`) plus `Footer`. `/indie-press` mirrors that, which is right — there is no region to select.
+- **The "not ingested yet" state needs its own branch.** `fetchBestsellerListFromDb` throws for a region with no rows, exactly as it does for a real outage, so a naive page shows an alarming red error box until the backfill runs. Detect that specific message, render a neutral `EmptyState`, and disable react-query's retry for it — the app's default `retry: 2` also makes `isLoading` flicker false between attempts, so gate on `isPending` or the page renders a bogus "Unknown error" mid-retry.
 
 **Step 2: Add the route**
 
@@ -1015,12 +1016,20 @@ In `src/App.tsx` beside the `/about` route:
 
 (plus the lazy/direct import matching how `About` is imported).
 
-**Step 3: Add nav links** in both `MainNav` and `MobileNav`, mirroring the existing About link markup.
+**Step 3: Add nav links** in both `MainNav` and `MobileNav`.
+
+There is **no About link in either nav** to mirror — the only nav group is the
+region toggle `Current | Elsewhere | Unique`. Do NOT add Indie Press to that
+toggle: it switches views *within* the selected region, while `/indie-press`
+leaves region context entirely and renders its own chrome, so a fourth segment
+would make the whole nav vanish on click. Add it as a separate quiet link
+beside the toggle group (and below it on mobile), active-styled off
+`location.pathname.startsWith('/indie-press')`.
 
 **Step 4: Verify**
 
 Run: `npx tsc -p tsconfig.app.json --noEmit 2>&1 | grep -i indiepress` (expect nothing) and `npm run build` (expect success).
-Then `npm run dev`, visit `http://localhost:5173/indie-press` (Task 4 Step 3 must have ingested at least one week): both lists render 40 rows; with two consecutive weeks ingested, rank-change arrows appear.
+Then `npm run dev`, visit `http://localhost:8080/indie-press` (this project's dev port is 8080, not Vite's default) (Task 4 Step 3 must have ingested at least one week): both lists render 40 rows; with two consecutive weeks ingested, rank-change arrows appear.
 
 **Step 5: Commit**
 

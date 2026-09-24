@@ -14,6 +14,7 @@ const BookDetail = lazy(() => import("./pages/BookDetail"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth").then(module => ({ default: module.Auth })));
 const About = lazy(() => import("./pages/About"));
+const IndiePress = lazy(() => import("./pages/IndiePress"));
 const Elsewhere = lazy(() => import("./pages/Elsewhere"));
 const RegionUnique = lazy(() => import("./pages/RegionUnique"));
 const Awards = lazy(() => import("./pages/Awards"));
@@ -116,6 +117,8 @@ const App = () => (
           {/* Auth route - outside region context */}
           <Route path="/auth" element={<Auth />} />
           <Route path="/about" element={<About />} />
+          {/* National IPC list — deliberately outside the region layout */}
+          <Route path="/indie-press" element={<IndiePress />} />
           <Route path="/review" element={<ReviewDefaultRedirect />} />
           <Route path="/review/:year/:category?/:region?" element={<Awards />} />
           <Route path="/review/:year/methodology" element={<Methodology />} />
