@@ -13,7 +13,8 @@
 **Key facts an engineer needs:**
 - Archive folder: `https://drive.google.com/drive/folders/1QJawmDIsZWswQ2I5cMZzEjWPTFGOlUv3`, one subfolder per week named `M-D-YY` (usually the publication Thursday, e.g. `9-3-26`; a few early folders drift, e.g. `2-15-26` is a Sunday).
 - CSVs (`independentpresstop40fiction.csv`, `independentpresstop40nonfiction.csv`) are present in **33 of the 37 archive folders**, the earliest being `1-29-26` → week_date `2026-01-28`. Surveyed live 2026-09-24; supersedes this plan's original "~April 2026 onward, Jan–Mar are PDF/JPG only" claim, which was wrong.
-- The four folders WITHOUT CSVs are `1-15-26`, `1-22-26`, `2-12-26` and **`7-2-26`**. The last is a mid-season gap, not a start-of-archive artifact, so "no CSVs" must be handled as a normal `unpublished` outcome anywhere in the range — never treated as an error or as the end of the archive.
+- After dedupe, **three** weeks have no CSVs: `1-15-26`, `1-22-26` and **`7-2-26`**. The last is a mid-season gap, not a start-of-archive artifact, so "no CSVs" must be handled as a normal `unpublished` outcome anywhere in the range — never treated as an error or as the end of the archive. (`2-12-26` also has none, but it loses the dedupe to `2-15-26`, which does.)
+- **CSV filenames are not stable.** Folder `7-9-26` holds `independentpresstop40fiction - Sheet1 (2).csv` and the matching nonfiction file — a re-export from Google Sheets, with a " - Sheet1" suffix and a " (2)" dedup counter. Exact-name matching silently drops that week. `findCsvIds` in Task 2 matches on the category prefix + `.csv`, preferring the canonical name. The two category prefixes are distinct (`...top40nonfiction` does not start with `...top40fiction`), so anchoring at the start keeps them from colliding.
 - **Two folders can map to the same `week_date`.** `2-12-26` (Thursday) and `2-15-26` (Sunday drift) both resolve to `2026-02-11`. Today this is benign — `2-12-26` has no CSVs — but nothing detects it, and `skipIfIngested` would mask a real collision as `already_ingested`. Task 2 adds a dedup that prefers the CSV-bearing folder.
 - The CSV format is stable across the whole archive: the parser in Task 1 was run against the earliest (`1-29-26`) and current (`9-24-26`) files, both categories, 40 rows each, header exactly `Ranking,Title,Publisher,ISBN,Author`.
 - CSV columns: `Ranking,Title,Publisher,ISBN,Author` — 40 rows, ISBN-13, quoted fields may contain commas. Known dirt: trailing spaces, occasional ALL-CAPS authors. Normalize whitespace only; do not attempt name-casing fixes.
@@ -445,12 +446,12 @@ export async function fetchWeekCsvs(
 **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run trigger/ipc/drive.test.ts`
-Expected: PASS (10 tests)
+Expected: PASS (15 tests)
 
 **Step 5: Live smoke test (one-off, not committed)**
 
 Run: `npx tsx -e "import('./trigger/ipc/drive.ts').then(async d => { const w = await d.listArchiveWeeks(); console.log(w.length, w.slice(-2)); })"`
-Expected (surveyed live 2026-09-24): **37 folders, 36 after dedupe, 33 with `hasCsvs: true`**, earliest `{ name: '1-29-26', weekDate: '2026-01-28' }`. The four with `hasCsvs: false` are `1-15-26`, `1-22-26`, `2-12-26`, `7-2-26`. Expect these counts to have grown by one per Thursday since.
+Expected (verified live 2026-09-24): **37 folders, 36 after dedupe, 33 with `hasCsvs: true`**, earliest `{ name: '1-29-26', weekDate: '2026-01-28' }`, latest `{ name: '9-24-26', weekDate: '2026-09-23' }`. The three with `hasCsvs: false` are `1-15-26`, `1-22-26`, `7-2-26`. No duplicate `weekDate` values may remain — that is the dedupe working. Expect these counts to have grown by one per Thursday since.
 (If `tsx` is unavailable, verify equivalently with `npx vitest run` on a temporary test — do not add a network test to the suite.)
 
 **Step 6: Commit**
@@ -662,8 +663,8 @@ export const ingestIpcWeek = task({
       return { status: "unpublished" as IpcIngestStatus, weekDate, rows: 0 };
     }
     // listArchiveWeeks already resolved CSV availability, so skip the second
-    // folder listing for the four known CSV-less weeks (1-15-26, 1-22-26,
-    // 2-12-26, 7-2-26) and any future one.
+    // folder listing for the known CSV-less weeks (1-15-26, 1-22-26, 7-2-26)
+    // and any future one.
     if (!folder.hasCsvs) {
       logger.info("IPC folder exists but has no CSVs", { weekDate, folder: folder.name });
       return { status: "unpublished" as IpcIngestStatus, weekDate, rows: 0 };
@@ -1029,8 +1030,8 @@ ABA allowlist lands changes Elsewhere and Unique Books for every region.
 
 **Step 2: Run backfill** — trigger `ipc-backfill` from the dashboard with payload `{}`.
 Expected, as surveyed live 2026-09-24 (add one week per Thursday since):
-**33 weeks `written`**, earliest `2026-01-28`, and exactly **four `unpublished`** —
-`1-15-26`, `1-22-26`, `2-12-26`, `7-2-26`. `unpublished` means the folder has no
+**33 weeks `written`**, earliest `2026-01-28`, and exactly **three `unpublished`** —
+`1-15-26`, `1-22-26`, `7-2-26`. `unpublished` means the folder has no
 CSVs; it is the correct outcome, not a failure. Note `7-2-26` sits mid-season, so
 an `unpublished` in the middle of the range is expected, not a sign of a broken run.
 
@@ -1072,7 +1073,7 @@ Then in the browser, all three must be unchanged from before the backfill:
 
 ### Deferred (explicitly out of scope — YAGNI)
 
-- **The four CSV-less weeks** — `2026-01-14`, `2026-01-21`, `2026-02-11`, `2026-07-01` — would need PDF/JPG parsing. Everything from `2026-01-28` on has CSVs and is now IN scope (the original plan wrongly deferred all of Jan–Mar).
+- **The three CSV-less weeks** — `2026-01-14`, `2026-01-21`, `2026-07-01` — would need PDF/JPG parsing. Everything from `2026-01-28` on has CSVs and is now IN scope (the original plan wrongly deferred all of Jan–Mar).
 - **Book-detail IPC badge / cross-referencing** ("this regional bestseller is also IPC Top 40 #N") — natural follow-on once data has accumulated; needs a per-ISBN IPC query + badge component.
 - **Email-based Wednesday ingestion** — would require embargo gating; the Thursday Drive fetch is simpler and sufficient.
 - **IPC in Year-in-Review** — intentionally excluded from scoring; revisit only if a dedicated IPC year-end view is wanted.
