@@ -14,6 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { logger } from '@/lib/logger';
 import { RegionalHeatMap } from '@/components/BookChart';
 import { BookPerformanceMetrics } from '@/components/BookPerformanceMetrics';
+import { VendorLinks } from '@/components/VendorLinks';
 import { fetchBookMetadata } from '@/services/bookMetadata';
 
 interface BookCover {
@@ -329,9 +330,9 @@ const BookDetail = () => {
             {/* ISBN */}
             {isbn && (
               <div className="py-6 border-t border-b border-border">
-                <div className="flex justify-between items-baseline">
+                <div className="flex flex-wrap justify-between items-baseline gap-x-3 gap-y-2">
                   <span className="text-xs uppercase tracking-wide text-muted-foreground">ISBN</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
                     <span className="text-sm">{isbn}</span>
                     <Button
                       variant="ghost"
@@ -355,6 +356,7 @@ const BookDetail = () => {
                     >
                       <Copy className="w-3 h-3" />
                     </Button>
+                    <VendorLinks isbn={isbn} />
                   </div>
                 </div>
               </div>

@@ -861,4 +861,68 @@ describe('BestsellerTable', () => {
       expect(bookTitle.closest('a')).toBeNull();
     });
   });
+  describe('vendor lookup links', () => {
+    it('should show iPage, PubEasy, Edelweiss and PRH links next to the copy button', () => {
+      renderWithRouter(<BestsellerTable category={mockCategory} />);
+
+      expect(
+        screen.getByRole('link', { name: 'Open 9781234567890 in iPage' })
+      ).toHaveAttribute(
+        'href',
+        'https://ipage.ingramcontent.com/ipage/servlet/ibg.common.titledetail.pd1000?ean_id=9781234567890'
+      );
+      const pubeasy = screen
+        .getByRole('link', { name: 'Open 9781234567890 in PubEasy' })
+        .getAttribute('href');
+      expect(pubeasy).toContain('pubeasy.com/product/list?');
+      expect(pubeasy).toContain('&isbn=9781234567890');
+      expect(
+        screen.getByRole('link', { name: 'Open 9781234567890 in Edelweiss' })
+      ).toHaveAttribute(
+        'href',
+        'https://www.edelweiss.plus/#keywordSearch&q=9781234567890'
+      );
+      expect(
+        screen.getByRole('link', { name: 'Open 9781234567890 in PRH' })
+      ).toHaveAttribute(
+        'href',
+        'https://selfservice.penguinrandomhouse.biz/search?terms=9781234567890&sort=relevance_asc&filters='
+      );
+    });
+
+    it('should keep the copy button working alongside the vendor links', async () => {
+      renderWithRouter(<BestsellerTable category={mockCategory} />);
+
+      fireEvent.click(screen.getByLabelText('Copy ISBN 9781234567890 to clipboard'));
+
+      await waitFor(() => {
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('9781234567890');
+      });
+    });
+
+    it('should show no vendor links for a title without an ISBN', () => {
+      const categoryNoISBN: BestsellerCategory = {
+        name: 'Test',
+        books: [
+          {
+            rank: 1,
+            title: 'Book Without ISBN',
+            author: 'Author',
+            publisher: 'Pub',
+            isbn: '',
+            price: '$25',
+            isNew: false,
+            wasDropped: false,
+          },
+        ],
+      };
+
+      renderWithRouter(<BestsellerTable category={categoryNoISBN} />);
+
+      expect(screen.queryByText('Edelweiss')).not.toBeInTheDocument();
+      expect(screen.queryByText('iPage')).not.toBeInTheDocument();
+      expect(screen.queryByText('PubEasy')).not.toBeInTheDocument();
+      expect(screen.queryByText('PRH')).not.toBeInTheDocument();
+    });
+  });
 });
