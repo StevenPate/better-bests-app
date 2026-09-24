@@ -26,6 +26,20 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+
+/**
+ * ABA region codes. regional_bestsellers also holds non-ABA pseudo-regions
+ * (currently 'IPC', the Independent Press Top 40), and `.neq('region', target)`
+ * would silently include them as if they were peer regions.
+ *
+ * DUPLICATED from src/config/abaRegions.ts because edge functions cannot
+ * import from src/. Keep the two in sync — src/config/abaRegions.test.ts
+ * asserts the canonical list is nine codes.
+ */
+const ABA_REGION_CODES = [
+  'PNBA', 'CALIBAN', 'CALIBAS', 'GLIBA', 'MIBA', 'MPIBA', 'NAIBA', 'NEIBA', 'SIBA',
+];
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -189,6 +203,7 @@ async function fetchElsewhereBooks(
         .select('*')
         .gte('week_date', fourWeeksAgoStr)
         .neq('region', filters.targetRegion)
+        .in('region', ABA_REGION_CODES)
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
         .order('week_date', { ascending: false });
 
