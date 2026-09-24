@@ -594,7 +594,7 @@ export function applyMomentum(
 **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run trigger/ipc/persist.test.ts`
-Expected: PASS (3 tests)
+Expected: PASS (6 tests)
 
 **Step 5: Commit**
 
