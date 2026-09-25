@@ -1048,11 +1048,19 @@ git commit -m "feat(ipc): /indie-press page showing the Independent Press Top 40
 ABA allowlist lands changes Elsewhere and Unique Books for every region.
 
 **Step 2: Run backfill** — trigger `ipc-backfill` from the dashboard with payload `{}`.
-Expected, as surveyed live 2026-09-24 (add one week per Thursday since):
-**33 weeks `written`**, earliest `2026-01-28`, and exactly **three `unpublished`** —
-`1-15-26`, `1-22-26`, `7-2-26`. `unpublished` means the folder has no
-CSVs; it is the correct outcome, not a failure. Note `7-2-26` sits mid-season, so
-an `unpublished` in the middle of the range is expected, not a sign of a broken run.
+Actual result, run 2026-09-25: **33 weeks, every one `written`**, earliest
+`2026-01-28`, latest `2026-09-23`, 2,640 rows, taking about 14 minutes.
+
+**No `unpublished` entries appear.** `ipcBackfill` filters to `hasCsvs` before
+iterating, so the three CSV-less weeks (`1-15-26`, `1-22-26`, `7-2-26`) are
+never triggered at all rather than returning `unpublished`. Only a direct
+`ingest-ipc-week` call on such a week reports `unpublished` — that is the Task 4
+Step 3 check, not this one.
+
+Two gaps in the written sequence are the source's, not ours:
+- `2026-02-25` — no archive folder maps to it; IPC published nothing between
+  `2-22-26` and `3-5-26`.
+- `2026-07-01` — the folder exists but holds only PDF/JPG.
 
 **Step 3: Verify data**
 
@@ -1060,8 +1068,8 @@ an `unpublished` in the middle of the range is expected, not a sign of a broken 
 select count(distinct week_date) as weeks,
        min(week_date) as first, max(week_date) as last
 from regional_bestsellers where region = 'IPC';
--- 33 weeks, first = 2026-01-28, last = current publication Wednesday
--- (one row per Thursday elapsed since the 2026-09-24 survey)
+-- verified 2026-09-25: weeks=33, first=2026-01-28, last=2026-09-23, rows=2640
+-- (one more week per Thursday elapsed since)
 
 select count(*) from regional_bestsellers
 where region = 'IPC' and week_date = (select max(week_date) from regional_bestsellers where region='IPC')
@@ -1084,7 +1092,10 @@ Then in the browser, all three must be unchanged from before the backfill:
 - `/review/2026` — numbers identical
 - Elsewhere tab for PNBA — no IPC-only titles
 - Unique tab for PNBA — count unchanged (this is the one Task 5 protects; if it
-  dropped, the `.in('region', ABA_REGION_CODES)` in `uniqueBooksService.ts` is missing)
+  dropped, the `.in('region', ABA_REGION_CODES)` in `uniqueBooksService.ts` is
+  missing). Measured after the 2026-09-25 backfill: 111 PNBA-unique ISBNs with
+  the fence, 109 without — so the fence is load-bearing, and its margin grows
+  as IPC history accumulates.
 
 **Step 5: Commit any fixups; done.**
 
