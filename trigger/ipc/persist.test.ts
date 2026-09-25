@@ -71,3 +71,31 @@ describe("applyMomentum", () => {
     expect(rows[1]).toMatchObject({ category: "NONFICTION", last_week_rank: 9 });
   });
 });
+
+describe("applyMomentum ingest-order contract", () => {
+  // Documents WHY ingest order matters, so the constraint is visible to anyone
+  // reading the tests rather than only to whoever opens persist.ts.
+  //
+  // get_weeks_on_list_batch_regional counts every stored week for an ISBN with
+  // no date bound. applyMomentum trusts that count, so passing one gathered
+  // while LATER weeks are in the table yields a weeks_on_list that includes the
+  // book's own future. The function cannot detect this — the caller must only
+  // ever write the newest week.
+  it("trusts historyCounts, so a count polluted by later weeks inflates weeks_on_list", () => {
+    const rows = toIpcDbRows("2026-03-04", [book(1, "9781000000001")], []);
+
+    // Honest count: this book charted in 2 weeks before 2026-03-04.
+    applyMomentum(rows, [], new Map([["9781000000001", 2]]));
+    expect(rows[0].weeks_on_list).toBe(3);
+
+    // Same week, but the RPC was called with June and September also stored.
+    applyMomentum(rows, [], new Map([["9781000000001", 9]]));
+    expect(rows[0].weeks_on_list).toBe(10); // wrong for March, and silently so
+  });
+
+  it("recomputes last_week_rank safely regardless of what else is stored", () => {
+    const rows = toIpcDbRows("2026-03-04", [book(1, "9781000000001")], []);
+    applyMomentum(rows, [{ isbn: "9781000000001", category: "FICTION", rank: 6 }], new Map());
+    expect(rows[0].last_week_rank).toBe(6);
+  });
+});

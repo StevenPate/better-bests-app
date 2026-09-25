@@ -79,6 +79,10 @@ export const ingestIpcWeek = task({
       .eq("region", IPC_REGION).eq("week_date", prevWeekDate);
     if (prevError) throw new Error(`IPC prev-week query failed: ${prevError.message}`);
 
+    // NOTE: this RPC counts every stored week for the ISBN, with no date
+    // bound, so it is only correct while `weekDate` is the newest IPC week in
+    // the table. See applyMomentum in ./ipc/persist for why that makes
+    // out-of-order ingest a correctness problem rather than a tidiness one.
     const isbns = [...new Set(rows.map((r) => r.isbn))];
     const { data: counts, error: rpcError } = await db.rpc(
       "get_weeks_on_list_batch_regional",

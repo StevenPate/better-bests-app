@@ -1090,6 +1090,49 @@ Then in the browser, all three must be unchanged from before the backfill:
 
 ---
 
+### Operating rule: ingest forward only
+
+`get_weeks_on_list_batch_regional` has **no date bound** — it counts every
+stored week for an ISBN in that region, not the weeks before the one being
+written. `applyMomentum` adds 1 for the current week (whose rows are deleted at
+that point), so the result is correct **only while the week being written is the
+newest IPC week in the table**.
+
+That holds automatically for the two normal paths: the Thursday cron always
+writes the current week, and `ipc-backfill` sorts oldest-first.
+
+It does **not** hold when a week is ingested after later weeks already exist.
+Two ways that happens:
+
+- a week fails and is repaired after subsequent weeks have landed
+- one of the CSV-less weeks (`2026-01-14`, `2026-01-21`, `2026-07-01`) gains
+  CSVs later and is picked up out of order
+
+The failure is quiet: `weeks_on_list` for the repaired week counts appearances
+from that book's own future, which reads as a plausible number rather than an
+obvious error. `last_week_rank` is unaffected — it reads one named prior week.
+
+**Repair procedure.** Never recompute a single old week in place. Instead clear
+from the affected week forward and re-ingest in date order:
+
+```sql
+-- everything from the repaired week onward
+delete from regional_bestsellers where region = 'IPC' and week_date >= '<week>';
+delete from fetch_cache where cache_key like 'ipc_%' and cache_key >= 'ipc_<week>';
+```
+
+then run `ipc-backfill` (it is oldest-first, and `skipIfIngested` will leave
+earlier weeks alone).
+
+**Why not make the ingest self-healing?** Recomputing momentum on an
+`unchanged` result would need a date-bounded count — a migration to a function
+that ABA code also calls — and would still want a targeted `update` rather than
+the delete-then-insert path, which briefly empties a week. Given that both
+normal paths are already monotonic, the explicit procedure above was judged the
+better trade. Revisit if gap repair becomes routine.
+
+---
+
 ### Deferred (explicitly out of scope — YAGNI)
 
 - **The three CSV-less weeks** — `2026-01-14`, `2026-01-21`, `2026-07-01` — would need PDF/JPG parsing. Everything from `2026-01-28` on has CSVs and is now IN scope (the original plan wrongly deferred all of Jan–Mar).

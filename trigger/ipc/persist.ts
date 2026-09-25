@@ -49,12 +49,28 @@ export function ipcContentHash(rows: DbRow[]): string {
 
 /**
  * Mutates rows in place. prevRows: the prior IPC week's (isbn, category, rank).
- * historyCounts: distinct prior weeks per ISBN from the
- * get_weeks_on_list_batch_regional RPC (computed while this week's rows are
- * deleted, so the count excludes the current week).
+ * historyCounts: distinct weeks per ISBN from the
+ * get_weeks_on_list_batch_regional RPC, called while this week's rows are
+ * deleted so the count excludes the current week.
  *
  * Keyed by category as well as ISBN: a title can move between the Fiction and
  * Nonfiction lists, and its rank on one says nothing about the other.
+ *
+ * INGEST FORWARD ONLY — this is a real constraint, not a preference.
+ *
+ * `get_weeks_on_list_batch_regional` has NO date bound (see
+ * supabase/migrations/20251106000001_regional_weeks_on_list.sql): it counts
+ * EVERY stored week for that ISBN and region, not the weeks before this one.
+ * That is correct only while the week being written is the newest one stored,
+ * which holds for the weekly cron and for an oldest-first backfill.
+ *
+ * Recompute an older week once later weeks exist and `weeks_on_list` silently
+ * counts appearances from that book's future — a plausible-looking number that
+ * is wrong, which is worse than the null you would otherwise have. So a gap is
+ * repaired by clearing the ipc_* fetch_cache keys from the affected week
+ * onward and re-ingesting in date order, never by recomputing one week in
+ * place. `last_week_rank` does not share the problem: it reads one named prior
+ * week and is safe to recompute at any time.
  */
 export function applyMomentum(
   rows: DbRow[],
