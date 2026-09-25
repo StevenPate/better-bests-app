@@ -1,5 +1,6 @@
 // src/pages/IndiePress.tsx
 import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Book, Sparkles, Download } from 'lucide-react';
 import { fetchBestsellerListFromDb } from '@/services/bestsellerApi';
@@ -12,6 +13,9 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Footer } from '@/components/Footer';
 import { RegionProvider } from '@/contexts/RegionContext';
 import { IPC_REGION } from '@/config/abaRegions';
+import { REGIONS, DEFAULT_REGION } from '@/config/regions';
+import { useAbaRegionCounts } from '@/hooks/useAbaRegionCounts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /**
  * fetchBestsellerListFromDb throws rather than returning empty when a region
@@ -20,6 +24,24 @@ import { IPC_REGION } from '@/config/abaRegions';
  */
 function isNotIngestedError(err: unknown): boolean {
   return err instanceof Error && /No bestseller data stored/i.test(err.message);
+}
+
+/**
+ * Which region the crossover markers compare against.
+ *
+ * This page has no region in its URL, so seed from the `preferred-region` key
+ * RegionContext writes on every region switch. Nothing else reads that key
+ * today. Read-only on purpose: writing it back from here would silently change
+ * the viewer's navigation region elsewhere in the app.
+ */
+function initialCompareRegion(): string {
+  try {
+    const saved = localStorage.getItem('preferred-region');
+    if (saved && REGIONS.some((r) => r.abbreviation === saved)) return saved;
+  } catch {
+    // Private mode or blocked storage — the default is fine.
+  }
+  return DEFAULT_REGION;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -63,6 +85,16 @@ export default function IndiePress() {
   });
 
   const notYetIngested = isNotIngestedError(error);
+
+  const [compareRegion, setCompareRegion] = useState(initialCompareRegion);
+
+  const isbns = useMemo(
+    () => (data ? data.current.categories.flatMap((c) => c.books.map((b) => b.isbn).filter(Boolean) as string[]) : []),
+    [data]
+  );
+  // Failure here degrades to no markers rather than an error: the list is
+  // fully useful without them.
+  const { data: abaPresence } = useAbaRegionCounts(isbns, data?.weekDate);
 
   const display = data && {
     ...data.current,
@@ -117,7 +149,22 @@ export default function IndiePress() {
             </p>
           )}
           {display && (
-            <div className="pt-1">
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Compare against</span>
+                <Select value={compareRegion} onValueChange={setCompareRegion}>
+                  <SelectTrigger className="h-8 w-[130px]" aria-label="Region to compare the list against">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REGIONS.map((r) => (
+                      <SelectItem key={r.abbreviation} value={r.abbreviation}>
+                        {r.abbreviation}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 onClick={handleCsvExport}
                 variant="outline"
@@ -183,6 +230,8 @@ export default function IndiePress() {
               bookAudiences={{}}
               isPbnStaff={false}
               onSwitchingDataClear={() => {}}
+              abaPresence={abaPresence}
+              abaCompareRegion={compareRegion}
             />
           </RegionProvider>
         )}

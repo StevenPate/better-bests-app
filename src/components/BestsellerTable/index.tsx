@@ -10,6 +10,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useRegion } from '@/hooks/useRegion';
 import { useBestsellerSwitches } from '@/hooks/useBestsellerSwitches';
 import { BestsellerCategory } from '@/types/bestseller';
+import type { AbaPresence } from '@/hooks/useAbaRegionCounts';
 import {
   BestsellerTableBook,
   SwitchType,
@@ -31,6 +32,12 @@ interface BestsellerTableProps {
   onSwitchingDataClear?: () => void;
   isAudienceFiltered?: boolean;
   listDate?: string;
+  /**
+   * ABA crossover markers keyed by ISBN, supplied only by the Independent
+   * Press Top 40. Omitted by the nine ABA region pages, which render as before.
+   */
+  abaPresence?: Map<string, AbaPresence>;
+  abaCompareRegion?: string;
 }
 
 /**
@@ -41,7 +48,9 @@ export const BestsellerTable: React.FC<BestsellerTableProps> = ({
   category,
   onSwitchingDataClear,
   isAudienceFiltered = false,
-  listDate
+  listDate,
+  abaPresence,
+  abaCompareRegion
 }) => {
   const { toast } = useToast();
   const { isPbnStaff } = useAuth();
@@ -353,6 +362,8 @@ export const BestsellerTable: React.FC<BestsellerTableProps> = ({
                       key={bookKey}
                       book={book}
                       bookKey={bookKey}
+                      abaPresence={book.isbn ? abaPresence?.get(book.isbn) : undefined}
+                      abaCompareRegion={abaCompareRegion}
                       isAudienceFiltered={isAudienceFiltered}
                       isMobile={isMobile}
                       isPbnStaff={isPbnStaff}

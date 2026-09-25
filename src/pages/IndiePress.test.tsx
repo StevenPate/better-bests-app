@@ -17,6 +17,14 @@ const mockGenerateAndDownload = vi.hoisted(() => vi.fn(() => ({
 })));
 vi.mock('@/services/csvExporter', () => ({ generateAndDownloadCSV: mockGenerateAndDownload }));
 
+// Keep the crossover query out of the tests that do not care about it, and
+// make it deterministic for the ones that do.
+const mockAbaCounts = vi.hoisted(() => vi.fn(() => ({ data: undefined })));
+vi.mock('@/hooks/useAbaRegionCounts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useAbaRegionCounts: mockAbaCounts,
+}));
+
 const listWithBooks = {
   current: {
     title: 'IPC Independent Bestsellers',
@@ -116,5 +124,56 @@ describe('IndiePress CSV export', () => {
       expect(screen.getByText('No Independent Press Top 40 data yet')).toBeInTheDocument()
     );
     expect(screen.queryByRole('button', { name: /Download/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('IndiePress ABA crossover markers', () => {
+  const presenceFor = (regions: string[], ranks: Record<string, number>) =>
+    new Map([
+      ['9781000000001', { regions: new Set(regions), rankByRegion: new Map(Object.entries(ranks)) }],
+    ]);
+
+  beforeEach(() => {
+    mockFetch.mockResolvedValue(listWithBooks);
+  });
+
+  it('shows the spread and the rank in the default compare region', async () => {
+    mockAbaCounts.mockReturnValue({ data: presenceFor(['PNBA', 'SIBA', 'NEIBA'], { PNBA: 3 }) });
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    expect(screen.getByText(/3 regions/)).toBeInTheDocument();
+    expect(screen.getByText(/PNBA #3/)).toBeInTheDocument();
+  });
+
+  it('flags a title charting elsewhere but not in the compare region', async () => {
+    mockAbaCounts.mockReturnValue({ data: presenceFor(['SIBA', 'NEIBA'], { SIBA: 7 }) });
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    expect(screen.getByText(/not PNBA/)).toBeInTheDocument();
+  });
+
+  it('renders the list unmarked when the crossover query fails', async () => {
+    mockAbaCounts.mockReturnValue({ data: undefined });
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    expect(screen.queryByText(/regions/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Failed to load/)).not.toBeInTheDocument();
+  });
+
+  it('offers a compare-region picker alongside the CSV button', async () => {
+    mockAbaCounts.mockReturnValue({ data: presenceFor(['SIBA'], { SIBA: 7 }) });
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    expect(
+      screen.getByRole('combobox', { name: /Region to compare the list against/i })
+    ).toBeInTheDocument();
   });
 });

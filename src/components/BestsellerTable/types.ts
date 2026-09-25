@@ -1,4 +1,5 @@
 import { BestsellerBook } from '@/types/bestseller';
+import type { AbaPresence } from '@/hooks/useAbaRegionCounts';
 
 /**
  * Extended book type with additional list metadata
@@ -65,6 +66,13 @@ export interface BestsellerTableRootProps {
   onSwitchingDataClear?: () => void;
   isAudienceFiltered?: boolean;
   listDate?: string;
+  /**
+   * ABA crossover markers, keyed by ISBN. Only the Independent Press Top 40
+   * passes these; the nine ABA region pages omit them and render as before.
+   */
+  abaPresence?: Map<string, AbaPresence>;
+  /** Region the crossover markers compare against. Required with abaPresence. */
+  abaCompareRegion?: string;
 }
 
 /**
@@ -94,6 +102,9 @@ export interface TableHeaderProps {
 export interface BookRowProps {
   book: BestsellerTableBook;
   bookKey: string;
+  /** ABA crossover for this title, when the list supplies it. */
+  abaPresence?: AbaPresence;
+  abaCompareRegion?: string;
   isAudienceFiltered: boolean;
   isMobile: boolean;
   isPbnStaff: boolean;

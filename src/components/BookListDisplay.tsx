@@ -1,5 +1,6 @@
 import { BestsellerTable } from "@/components/BestsellerTable";
 import { BestsellerList } from "@/types/bestseller";
+import type { AbaPresence } from "@/hooks/useAbaRegionCounts";
 import { EmptyState } from "@/components/ui/status";
 import { Filter, Search } from "lucide-react";
 import { matchesAllFilters } from "@/utils/bookFilters";
@@ -13,6 +14,12 @@ interface BookListDisplayProps {
   isPbnStaff: boolean;
   onSwitchingDataClear: () => void;
   onResetFilters?: () => void;
+  /**
+   * ABA crossover markers keyed by ISBN, passed straight through to the table.
+   * Only /indie-press supplies these.
+   */
+  abaPresence?: Map<string, AbaPresence>;
+  abaCompareRegion?: string;
 }
 
 /**
@@ -61,7 +68,9 @@ export const BookListDisplay = ({
   bookAudiences,
   isPbnStaff,
   onSwitchingDataClear,
-  onResetFilters
+  onResetFilters,
+  abaPresence,
+  abaCompareRegion,
 }: BookListDisplayProps) => {
 
   // Shared filter function using bookFilters utilities
@@ -126,6 +135,8 @@ export const BookListDisplay = ({
         onSwitchingDataClear={onSwitchingDataClear}
         isAudienceFiltered={true}
         listDate={bestsellerData.date}
+        abaPresence={abaPresence}
+        abaCompareRegion={abaCompareRegion}
       />
     );
   }
@@ -171,6 +182,8 @@ export const BookListDisplay = ({
           onSwitchingDataClear={onSwitchingDataClear}
           isAudienceFiltered={false}
           listDate={bestsellerData.date}
+          abaPresence={abaPresence}
+          abaCompareRegion={abaCompareRegion}
         />
       ))}
     </>
