@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -9,6 +9,13 @@ import IndiePress from './IndiePress';
 const mockFetch = vi.hoisted(() => vi.fn());
 vi.mock('@/services/bestsellerApi', () => ({ fetchBestsellerListFromDb: mockFetch }));
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ isPbnStaff: false, user: null }) }));
+
+const mockGenerateAndDownload = vi.hoisted(() => vi.fn(() => ({
+  filename: 'IPC_bs_adds_no_drops_20260925.csv',
+  content: '',
+  bookCount: 1,
+})));
+vi.mock('@/services/csvExporter', () => ({ generateAndDownloadCSV: mockGenerateAndDownload }));
 
 const listWithBooks = {
   current: {
@@ -80,5 +87,34 @@ describe('IndiePress', () => {
     );
     expect(screen.getByText('network exploded')).toBeInTheDocument();
     expect(mockFetch).toHaveBeenCalledTimes(3); // initial + 2 retries
+  });
+});
+
+describe('IndiePress CSV export', () => {
+  it('exports the current list with the publisher column filled in', async () => {
+    mockFetch.mockResolvedValue(listWithBooks);
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Download the Independent Press Top 40 as a CSV/i }));
+
+    expect(mockGenerateAndDownload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'IPC',
+        type: 'adds_no_drops',
+        includePublisher: true,
+      })
+    );
+  });
+
+  it('offers no CSV button before anything is ingested', async () => {
+    mockFetch.mockRejectedValue(new Error('No bestseller data stored for region IPC'));
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() =>
+      expect(screen.getByText('No Independent Press Top 40 data yet')).toBeInTheDocument()
+    );
+    expect(screen.queryByRole('button', { name: /Download/i })).not.toBeInTheDocument();
   });
 });

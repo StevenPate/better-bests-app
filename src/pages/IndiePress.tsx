@@ -1,10 +1,13 @@
 // src/pages/IndiePress.tsx
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Book, Sparkles } from 'lucide-react';
+import { Book, Sparkles, Download } from 'lucide-react';
 import { fetchBestsellerListFromDb } from '@/services/bestsellerApi';
 import { BookListDisplay } from '@/components/BookListDisplay';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/status';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { generateAndDownloadCSV } from '@/services/csvExporter';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Footer } from '@/components/Footer';
 import { RegionProvider } from '@/contexts/RegionContext';
@@ -48,6 +51,7 @@ function formatWeekDate(iso: string): string {
  * lightweight header the way /about does.
  */
 export default function IndiePress() {
+  const { toast } = useToast();
   const { data, isPending, error, refetch } = useQuery({
     queryKey: ['ipcList'],
     queryFn: () => fetchBestsellerListFromDb({ region: IPC_REGION }),
@@ -67,6 +71,26 @@ export default function IndiePress() {
       ...c,
       name: CATEGORY_LABELS[c.name] ?? c.name,
     })),
+  };
+
+  /**
+   * Retailer CSV for POS ordering, same shape as the ABA exports but with the
+   * publisher filled in — on an indie-press list that is the column you order
+   * by. `adds_no_drops` is the whole current list; drops carry no rank here so
+   * there is nothing to order from them.
+   */
+  const handleCsvExport = () => {
+    if (!display) return;
+    const result = generateAndDownloadCSV({
+      region: IPC_REGION,
+      type: 'adds_no_drops',
+      data: display,
+      includePublisher: true,
+    });
+    toast({
+      title: 'CSV Generated',
+      description: `${result.filename} has been downloaded with ${result.bookCount} books`,
+    });
   };
 
   return (
@@ -91,6 +115,21 @@ export default function IndiePress() {
               National bestsellers from independent publishers, week of{' '}
               {formatWeekDate(data.weekDate)}
             </p>
+          )}
+          {display && (
+            <div className="pt-1">
+              <Button
+                onClick={handleCsvExport}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                aria-label="Download the Independent Press Top 40 as a CSV for POS ordering"
+                title="Retailer CSV: ISBN, quantity, title, author, publisher"
+              >
+                <Download className="w-4 h-4" />
+                Download CSV
+              </Button>
+            </div>
           )}
           <p className="text-sm text-muted-foreground">
             Published weekly by the{' '}

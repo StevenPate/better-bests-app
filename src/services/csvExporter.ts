@@ -16,6 +16,12 @@ interface CSVExportOptions {
   type: CSVExportType;
   data: BestsellerList;
   audienceFilter?: string; // Optional audience filter for tracking
+  /**
+   * Emit the publisher in column 10 and quote fields that need it (RFC 4180).
+   * Used by the Independent Press Top 40 export, where the publisher is the
+   * point. Off by default so ABA exports stay byte-identical.
+   */
+  includePublisher?: boolean;
 }
 
 interface CSVExportResult {
@@ -25,18 +31,49 @@ interface CSVExportResult {
 }
 
 /**
- * Format a book entry as a CSV line
+ * Quote a field per RFC 4180, but only when it needs it.
+ *
+ * Used exclusively by the includePublisher variant. The default path stays
+ * unquoted — see formatBookAsCSVLine.
  */
-const formatBookAsCSVLine = (book: {
-  isbn?: string;
-  title: string;
-  author: string;
-}): string => {
-  const isbn = book.isbn || '';
-  const title = book.title || '';
-  const author = book.author || '';
-  const publisher = ''; // Not available in current data
+const csvField = (value: string): string =>
+  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
+/**
+ * Format a book entry as a CSV line.
+ *
+ * Column 10 is Publisher. It is blank by default even though the data has
+ * been available for some time: the ABA exports feed a POS import that has
+ * consumed this exact byte layout for a long time, so filling the column (or
+ * quoting anything) is opt-in per export rather than a global change.
+ *
+ * KNOWN ISSUE on the default path: fields are not escaped, so a comma in a
+ * title or author shifts every column after it. This is long-standing and
+ * deliberately preserved here — a test pins the current bytes. It is largely
+ * invisible because ISBN and quantity are columns 1-2, ahead of any
+ * comma-bearing field, so ordering still works while the trailing metadata
+ * garbles. Fixing it means changing what the POS receives, which is a
+ * decision for whoever owns that import.
+ *
+ * With includePublisher (the IPC variant) the publisher is emitted AND every
+ * text field is quoted when needed. The two travel together on purpose:
+ * adding a comma-bearing field to an unescaped row would actively corrupt it.
+ */
+const formatBookAsCSVLine = (
+  book: { isbn?: string; title: string; author: string; publisher?: string },
+  options: { includePublisher?: boolean } = {}
+): string => {
+  const isbn = book.isbn || '';
+
+  if (!options.includePublisher) {
+    const title = book.title || '';
+    const author = book.author || '';
+    return `${isbn},0,${title},,${author},,,,,,,,,,,,,`;
+  }
+
+  const title = csvField(book.title || '');
+  const author = csvField(book.author || '');
+  const publisher = csvField(book.publisher || '');
   return `${isbn},0,${title},,${author},,,,,${publisher},,,,,,,,`;
 };
 
@@ -90,7 +127,7 @@ const getDateString = (): string => {
  */
 export const generateBestsellerCSV = (options: CSVExportOptions): CSVExportResult => {
   try {
-    const { region, type, data } = options;
+    const { region, type, data, includePublisher } = options;
 
     if (!data || !data.categories) {
       throw new CsvError({ type, reason: 'invalid_data' });
@@ -100,7 +137,7 @@ export const generateBestsellerCSV = (options: CSVExportOptions): CSVExportResul
     const dateStr = getDateString();
     const regionPrefix = region ? `${region.toUpperCase()}_` : '';
 
-    let books: Array<{ isbn?: string; title: string; author: string; isNew?: boolean; wasDropped?: boolean }> = [];
+    let books: Array<{ isbn?: string; title: string; author: string; publisher?: string; isNew?: boolean; wasDropped?: boolean }> = [];
     let filename = '';
 
     // Filter books based on export type
@@ -131,7 +168,7 @@ export const generateBestsellerCSV = (options: CSVExportOptions): CSVExportResul
 
     // Format each book as CSV line
     books.forEach(book => {
-      csvLines.push(formatBookAsCSVLine(book));
+      csvLines.push(formatBookAsCSVLine(book, { includePublisher }));
     });
 
     return {
