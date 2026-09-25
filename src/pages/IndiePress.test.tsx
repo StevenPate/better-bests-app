@@ -177,3 +177,44 @@ describe('IndiePress ABA crossover markers', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('IndiePress compare-region persistence', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockFetch.mockResolvedValue(listWithBooks);
+    mockAbaCounts.mockReturnValue({
+      data: new Map([
+        ['9781000000001', { regions: new Set(['SIBA']), rankByRegion: new Map([['SIBA', 7]]) }],
+      ]),
+    });
+  });
+
+  it('remembers the picked region without touching the nav region', async () => {
+    localStorage.setItem('preferred-region', 'GLIBA');
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    // Seeded from the nav preference on a first visit.
+    expect(screen.getByRole('combobox', { name: /Region to compare/i })).toHaveTextContent('GLIBA');
+
+    fireEvent.click(screen.getByRole('combobox', { name: /Region to compare/i }));
+    fireEvent.click(await screen.findByRole('option', { name: 'SIBA' }));
+
+    await waitFor(() => expect(localStorage.getItem('ipc-compare-region')).toBe('SIBA'));
+    // The nav region is untouched: picking a comparison here must not move the
+    // viewer's whole region context.
+    expect(localStorage.getItem('preferred-region')).toBe('GLIBA');
+  });
+
+  it('starts from the remembered choice on a later visit', async () => {
+    localStorage.setItem('ipc-compare-region', 'SIBA');
+    localStorage.setItem('preferred-region', 'GLIBA');
+
+    render(<IndiePress />, { wrapper });
+    await waitFor(() => expect(screen.getByText('A Novel')).toBeInTheDocument());
+
+    expect(screen.getByRole('combobox', { name: /Region to compare/i })).toHaveTextContent('SIBA');
+    expect(screen.getByText(/SIBA #7/)).toBeInTheDocument();
+  });
+});

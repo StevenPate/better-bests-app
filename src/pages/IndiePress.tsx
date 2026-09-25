@@ -13,7 +13,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Footer } from '@/components/Footer';
 import { RegionProvider } from '@/contexts/RegionContext';
 import { IPC_REGION } from '@/config/abaRegions';
-import { REGIONS, DEFAULT_REGION } from '@/config/regions';
+import { REGIONS } from '@/config/regions';
+import { readCompareRegion, saveCompareRegion } from '@/lib/ipcComparePreference';
 import { useAbaRegionCounts } from '@/hooks/useAbaRegionCounts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -26,23 +27,7 @@ function isNotIngestedError(err: unknown): boolean {
   return err instanceof Error && /No bestseller data stored/i.test(err.message);
 }
 
-/**
- * Which region the crossover markers compare against.
- *
- * This page has no region in its URL, so seed from the `preferred-region` key
- * RegionContext writes on every region switch. Nothing else reads that key
- * today. Read-only on purpose: writing it back from here would silently change
- * the viewer's navigation region elsewhere in the app.
- */
-function initialCompareRegion(): string {
-  try {
-    const saved = localStorage.getItem('preferred-region');
-    if (saved && REGIONS.some((r) => r.abbreviation === saved)) return saved;
-  } catch {
-    // Private mode or blocked storage — the default is fine.
-  }
-  return DEFAULT_REGION;
-}
+
 
 const CATEGORY_LABELS: Record<string, string> = {
   FICTION: 'Fiction',
@@ -86,7 +71,14 @@ export default function IndiePress() {
 
   const notYetIngested = isNotIngestedError(error);
 
-  const [compareRegion, setCompareRegion] = useState(initialCompareRegion);
+  const [compareRegion, setCompareRegion] = useState(readCompareRegion);
+
+  // Persist the choice so it sticks on the next visit. Writes this page's own
+  // key, never the nav region — see lib/ipcComparePreference.
+  const chooseCompareRegion = (region: string) => {
+    setCompareRegion(region);
+    saveCompareRegion(region);
+  };
 
   const isbns = useMemo(
     () => (data ? data.current.categories.flatMap((c) => c.books.map((b) => b.isbn).filter(Boolean) as string[]) : []),
@@ -152,7 +144,7 @@ export default function IndiePress() {
             <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Compare against</span>
-                <Select value={compareRegion} onValueChange={setCompareRegion}>
+                <Select value={compareRegion} onValueChange={chooseCompareRegion}>
                   <SelectTrigger className="h-8 w-[130px]" aria-label="Region to compare the list against">
                     <SelectValue />
                   </SelectTrigger>

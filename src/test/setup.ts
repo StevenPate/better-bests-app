@@ -29,6 +29,13 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// jsdom implements no layout, so Element.scrollIntoView is missing. Radix's
+// Select calls it when the listbox opens, which otherwise throws and leaves the
+// menu unrendered — any test that opens a Select needs this.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {
   constructor() {}
