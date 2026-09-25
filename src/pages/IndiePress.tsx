@@ -7,6 +7,7 @@ import { BookListDisplay } from '@/components/BookListDisplay';
 import { LoadingState, ErrorState, EmptyState } from '@/components/ui/status';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Footer } from '@/components/Footer';
+import { RegionProvider } from '@/contexts/RegionContext';
 import { IPC_REGION } from '@/config/abaRegions';
 
 /**
@@ -126,16 +127,25 @@ export default function IndiePress() {
           />
         )}
 
+        {/* BookListDisplay -> BestsellerTable calls useRegion(), which throws
+            without a RegionProvider. The provider normally comes from the
+            /region/:region Layout, and this page sits outside it by design.
+            With no :region param the provider falls back to the default region
+            and its redirect effect stays inert, so this is just satisfying the
+            contract — currentRegion is only read by the staff switch hook,
+            which renders nothing here (isPbnStaff={false}). */}
         {!isPending && !error && display && (
-          <BookListDisplay
-            bestsellerData={display}
-            filter="all"
-            audienceFilter="all"
-            searchTerm=""
-            bookAudiences={{}}
-            isPbnStaff={false}
-            onSwitchingDataClear={() => {}}
-          />
+          <RegionProvider>
+            <BookListDisplay
+              bestsellerData={display}
+              filter="all"
+              audienceFilter="all"
+              searchTerm=""
+              bookAudiences={{}}
+              isPbnStaff={false}
+              onSwitchingDataClear={() => {}}
+            />
+          </RegionProvider>
         )}
       </main>
 
