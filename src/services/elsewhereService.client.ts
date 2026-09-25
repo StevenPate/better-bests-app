@@ -16,6 +16,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { ABA_REGION_CODES } from '@/config/abaRegions';
 import { logger } from '@/lib/logger';
 import { DatabaseError, logError } from '@/lib/errors';
 import {
@@ -120,6 +121,9 @@ async function fetchRegionalBooks(
       .select('*')
       .gte('week_date', fourWeeksAgoStr)
       .neq('region', targetRegion)
+      // regional_bestsellers also holds non-ABA pseudo-regions (IPC). Without
+      // this, "every region except the one I'm viewing" silently includes them.
+      .in('region', ABA_REGION_CODES)
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
       .order('week_date', { ascending: false });
 

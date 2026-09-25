@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Copy, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { VendorLinks } from '@/components/VendorLinks';
+import { AbaPresenceMarker } from './AbaPresenceMarker';
 import { BookRowProps } from './types';
 import { getRowClassName, getRankChangeIcon, getRankChangeIconClasses, getRankChangeText, getRankChangeType } from './utils';
 
@@ -14,6 +15,8 @@ import { getRowClassName, getRankChangeIcon, getRankChangeIconClasses, getRankCh
 export const BookRow: React.FC<BookRowProps> = ({
   book,
   bookKey,
+  abaPresence,
+  abaCompareRegion,
   isAudienceFiltered,
   isMobile,
   isPbnStaff,
@@ -126,7 +129,12 @@ export const BookRow: React.FC<BookRowProps> = ({
           ) : (
             <span className="text-base font-semibold">{book.title}</span>
           )}
-          <span className="text-sm text-muted-foreground">{book.author}</span>
+          <span className="text-sm text-muted-foreground">
+            {book.author}
+            {abaCompareRegion && (
+              <AbaPresenceMarker presence={abaPresence} region={abaCompareRegion} />
+            )}
+          </span>
           <div className="flex flex-wrap items-center gap-x-1 gap-y-1 mt-1">
             <span className="font-mono text-xs text-muted-foreground/70">{book.isbn}</span>
             {book.isbn && (

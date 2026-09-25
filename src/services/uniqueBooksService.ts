@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { ABA_REGION_CODES } from '@/config/abaRegions';
 import { logger } from '@/lib/logger';
 import { DatabaseError, logError } from '@/lib/errors';
 
@@ -114,6 +115,9 @@ async function buildPastYearRegionMap(isbns: string[], cutoffDate: string): Prom
         .select('isbn, region')
         .in('isbn', isbnBatch)
         .gte('week_date', cutoffDate)
+        // ABA regions only — an IPC appearance must not make a book that is
+        // unique to one region look like it charted somewhere else too.
+        .in('region', ABA_REGION_CODES)
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
       if (error) {

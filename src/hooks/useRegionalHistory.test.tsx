@@ -5,38 +5,39 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useRegionalHistory } from './useRegionalHistory';
 import type { ReactNode } from 'react';
 
-// Mock Supabase client
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          gte: vi.fn(() => ({
-            order: vi.fn(() => ({
-              data: [
-                {
-                  region: 'PNBA',
-                  week_date: '2025-01-15',
-                  rank: 3,
-                  category: 'Fiction',
-                  list_title: 'Fiction',
-                },
-                {
-                  region: 'SIBA',
-                  week_date: '2025-01-15',
-                  rank: 5,
-                  category: 'Fiction',
-                  list_title: 'Southern Fiction',
-                },
-              ],
-              error: null,
-            })),
-          })),
-        })),
-      })),
-    })),
+// Mock Supabase client.
+//
+// Chainable builder rather than a fixed select->eq->gte->order nest: every
+// filter method returns the builder and the builder itself carries the result,
+// so adding or reordering a filter in the hook does not break this mock. (It
+// broke once when the ABA region fence added .in('region', ...).)
+const HISTORY_ROWS = [
+  {
+    region: 'PNBA',
+    week_date: '2025-01-15',
+    rank: 3,
+    category: 'Fiction',
+    list_title: 'Fiction',
   },
-}));
+  {
+    region: 'SIBA',
+    week_date: '2025-01-15',
+    rank: 5,
+    category: 'Fiction',
+    list_title: 'Southern Fiction',
+  },
+];
+
+vi.mock('@/integrations/supabase/client', () => {
+  const makeBuilder = () => {
+    const builder: Record<string, unknown> = { data: HISTORY_ROWS, error: null };
+    for (const m of ['select', 'eq', 'gte', 'lte', 'in', 'neq', 'not', 'order', 'limit', 'range']) {
+      builder[m] = () => builder;
+    }
+    return builder;
+  };
+  return { supabase: { from: () => makeBuilder() } };
+});
 
 describe('useRegionalHistory', () => {
   let queryClient: QueryClient;

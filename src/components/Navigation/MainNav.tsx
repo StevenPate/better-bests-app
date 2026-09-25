@@ -93,6 +93,21 @@ export function MainNav() {
                 Unique
               </Link>
             </div>
+
+            {/* National IPC list. Deliberately OUTSIDE the toggle above: that
+                group switches views within the selected region, while this
+                leaves region context entirely. */}
+            <Link
+              to="/indie-press"
+              className={cn(
+                "whitespace-nowrap text-sm font-medium transition-colors cursor-pointer",
+                location.pathname.startsWith('/indie-press')
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground [&:hover]:no-underline'
+              )}
+            >
+              Indie Press
+            </Link>
           </div>
 
           {/* Right: Controls, Theme Toggle & Auth */}

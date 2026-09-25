@@ -845,4 +845,88 @@ describe('csvExporter', () => {
       });
     });
   });
+  describe('includePublisher (IPC variant)', () => {
+    const listWith = (book: Partial<Record<string, unknown>>): BestsellerList => ({
+      title: 'Test',
+      date: '2026-09-23',
+      categories: [
+        {
+          name: 'FICTION',
+          books: [
+            {
+              rank: 1,
+              title: 'A Title',
+              author: 'An Author',
+              publisher: 'A Publisher',
+              isbn: '9781000000001',
+              price: '',
+              isNew: false,
+              wasDropped: false,
+              ...book,
+            },
+          ],
+        },
+      ],
+    } as BestsellerList);
+
+    it('puts the publisher in the tenth column', () => {
+      const result = generateBestsellerCSV({
+        type: 'adds_no_drops',
+        data: listWith({}),
+        includePublisher: true,
+      });
+      expect(result.content.split(',')[9]).toBe('A Publisher');
+    });
+
+    // Field 10 is useless if a comma in it shifts every column after it, and
+    // indie imprints are exactly where commas live ("Farrar, Straus and Giroux").
+    it('quotes a publisher containing a comma', () => {
+      const result = generateBestsellerCSV({
+        type: 'adds_no_drops',
+        data: listWith({ publisher: 'Farrar, Straus and Giroux' }),
+        includePublisher: true,
+      });
+      expect(result.content).toContain('"Farrar, Straus and Giroux"');
+      // 18 fields: a naive split would see 19 if the comma leaked.
+      expect(result.content.split('"').length).toBe(3);
+    });
+
+    it('quotes titles and authors containing commas', () => {
+      const result = generateBestsellerCSV({
+        type: 'adds_no_drops',
+        data: listWith({ title: 'Eat, Pray, Love', author: 'Homer, Emily Wilson (Transl.)' }),
+        includePublisher: true,
+      });
+      expect(result.content).toContain('"Eat, Pray, Love"');
+      expect(result.content).toContain('"Homer, Emily Wilson (Transl.)"');
+    });
+
+    it('doubles embedded quotes, per RFC 4180', () => {
+      const result = generateBestsellerCSV({
+        type: 'adds_no_drops',
+        data: listWith({ title: 'The "Best" Book' }),
+        includePublisher: true,
+      });
+      expect(result.content).toContain('"The ""Best"" Book"');
+    });
+
+    it('leaves fields without commas or quotes unquoted', () => {
+      const result = generateBestsellerCSV({
+        type: 'adds_no_drops',
+        data: listWith({}),
+        includePublisher: true,
+      });
+      expect(result.content).not.toContain('"');
+    });
+
+    // Regression guard: the ABA exports must stay byte-identical, which is why
+    // publisher and quoting are opt-in rather than simply fixed everywhere.
+    it('changes nothing when the option is absent', () => {
+      const data = listWith({ title: 'Eat, Pray, Love', publisher: 'A Publisher' });
+      const aba = generateBestsellerCSV({ type: 'adds_no_drops', data });
+      expect(aba.content).toBe('9781000000001,0,Eat, Pray, Love,,An Author,,,,,,,,,,,,,');
+      expect(aba.content).not.toContain('"');
+      expect(aba.content).not.toContain('A Publisher');
+    });
+  });
 });

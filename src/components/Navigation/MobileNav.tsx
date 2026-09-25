@@ -132,6 +132,20 @@ export function MobileNav() {
                         Unique
                       </Link>
                     </div>
+
+                    {/* National IPC list — outside the region toggle above. */}
+                    <Link
+                      to="/indie-press"
+                      onClick={handleNavLinkClick}
+                      className={cn(
+                        "block px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+                        location.pathname.startsWith('/indie-press')
+                          ? 'text-foreground'
+                          : 'text-muted-foreground'
+                      )}
+                    >
+                      Indie Press
+                    </Link>
                   </div>
 
                   {/* Divider */}

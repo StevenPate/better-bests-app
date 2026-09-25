@@ -1,5 +1,6 @@
 // src/hooks/useRegionalHistory.ts
 import { useQuery } from '@tanstack/react-query';
+import { ABA_REGION_CODES } from '@/config/abaRegions';
 import { supabase } from '@/integrations/supabase/client';
 import type { RegionalWeekData } from '@/components/BookChart/types';
 
@@ -34,6 +35,9 @@ export function useRegionalHistory({
         .select('region, week_date, rank, category, list_title')
         .eq('isbn', isbn.replace(/[-\s]/g, ''))
         .gte('week_date', cutoffDateStr)
+        // ABA regions only — IPC is not a region and must not render as a
+        // tenth row on the book-detail heat map.
+        .in('region', ABA_REGION_CODES)
         .order('week_date', { ascending: false });
 
       if (regionalError) throw regionalError;

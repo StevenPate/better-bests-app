@@ -1,0 +1,235 @@
+// src/pages/IndiePress.tsx
+import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Book, Sparkles, Download } from 'lucide-react';
+import { fetchBestsellerListFromDb } from '@/services/bestsellerApi';
+import { BookListDisplay } from '@/components/BookListDisplay';
+import { LoadingState, ErrorState, EmptyState } from '@/components/ui/status';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { generateAndDownloadCSV } from '@/services/csvExporter';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Footer } from '@/components/Footer';
+import { RegionProvider } from '@/contexts/RegionContext';
+import { IPC_REGION } from '@/config/abaRegions';
+import { REGIONS } from '@/config/regions';
+import { readCompareRegion, saveCompareRegion } from '@/lib/ipcComparePreference';
+import { useAbaRegionCounts } from '@/hooks/useAbaRegionCounts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+/**
+ * fetchBestsellerListFromDb throws rather than returning empty when a region
+ * has no stored rows. Recognise that specific case so it can be presented as
+ * "not ingested yet" rather than as a failure — and not retried.
+ */
+function isNotIngestedError(err: unknown): boolean {
+  return err instanceof Error && /No bestseller data stored/i.test(err.message);
+}
+
+
+
+const CATEGORY_LABELS: Record<string, string> = {
+  FICTION: 'Fiction',
+  NONFICTION: 'Nonfiction',
+};
+
+/**
+ * `week_date` is a date-only ISO string. `new Date('2026-09-23')` parses as UTC
+ * midnight, which renders as the 22nd anywhere west of Greenwich — so pin it to
+ * local midnight before formatting.
+ */
+function formatWeekDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      });
+}
+
+/**
+ * The Independent Press Top 40 — a national list from the Independent
+ * Publishers Caucus, not an ABA region. It lives outside the /region/:region
+ * layout on purpose: there is no region to select, so it carries its own
+ * lightweight header the way /about does.
+ */
+export default function IndiePress() {
+  const { toast } = useToast();
+  const { data, isPending, error, refetch } = useQuery({
+    queryKey: ['ipcList'],
+    queryFn: () => fetchBestsellerListFromDb({ region: IPC_REGION }),
+    staleTime: 30 * 60 * 1000,
+    // The app retries twice by default. An un-ingested region is not a
+    // transient failure — retrying it just delays the empty state by several
+    // seconds while the page sits in a misleading in-between render.
+    retry: (failureCount, err) => !isNotIngestedError(err) && failureCount < 2,
+  });
+
+  const notYetIngested = isNotIngestedError(error);
+
+  const [compareRegion, setCompareRegion] = useState(readCompareRegion);
+
+  // Persist the choice so it sticks on the next visit. Writes this page's own
+  // key, never the nav region — see lib/ipcComparePreference.
+  const chooseCompareRegion = (region: string) => {
+    setCompareRegion(region);
+    saveCompareRegion(region);
+  };
+
+  const isbns = useMemo(
+    () => (data ? data.current.categories.flatMap((c) => c.books.map((b) => b.isbn).filter(Boolean) as string[]) : []),
+    [data]
+  );
+  // Failure here degrades to no markers rather than an error: the list is
+  // fully useful without them.
+  const { data: abaPresence } = useAbaRegionCounts(isbns, data?.weekDate);
+
+  const display = data && {
+    ...data.current,
+    title: 'Independent Press Top 40',
+    categories: data.current.categories.map((c) => ({
+      ...c,
+      name: CATEGORY_LABELS[c.name] ?? c.name,
+    })),
+  };
+
+  /**
+   * Retailer CSV for POS ordering, same shape as the ABA exports but with the
+   * publisher filled in — on an indie-press list that is the column you order
+   * by. `adds_no_drops` is the whole current list; drops carry no rank here so
+   * there is nothing to order from them.
+   */
+  const handleCsvExport = () => {
+    if (!display) return;
+    const result = generateAndDownloadCSV({
+      region: IPC_REGION,
+      type: 'adds_no_drops',
+      data: display,
+      includePublisher: true,
+    });
+    toast({
+      title: 'CSV Generated',
+      description: `${result.filename} has been downloaded with ${result.bookCount} books`,
+    });
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="relative">
+              <Book className="w-8 h-8 text-primary" />
+              <Sparkles className="w-4 h-4 text-accent absolute -top-1 -right-1" />
+            </div>
+          </Link>
+          <ThemeToggle />
+        </div>
+      </header>
+
+      <main className="flex-1 container mx-auto px-4 py-8 space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold">Independent Press Top 40</h1>
+          {data && (
+            <p className="text-muted-foreground">
+              National bestsellers from independent publishers, week of{' '}
+              {formatWeekDate(data.weekDate)}
+            </p>
+          )}
+          {display && (
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Compare against</span>
+                <Select value={compareRegion} onValueChange={chooseCompareRegion}>
+                  <SelectTrigger className="h-8 w-[130px]" aria-label="Region to compare the list against">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REGIONS.map((r) => (
+                      <SelectItem key={r.abbreviation} value={r.abbreviation}>
+                        {r.abbreviation}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={handleCsvExport}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                aria-label="Download the Independent Press Top 40 as a CSV for POS ordering"
+                title="Retailer CSV: ISBN, quantity, title, author, publisher"
+              >
+                <Download className="w-4 h-4" />
+                Download CSV
+              </Button>
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            Published weekly by the{' '}
+            <a
+              href="https://www.indiepubs.org/top40"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Independent Publishers Caucus
+            </a>
+          </p>
+        </div>
+
+        {isPending && <LoadingState message="Loading Independent Press Top 40..." />}
+
+        {/* "Nothing ingested yet" is the expected state until the backfill
+            runs, not a failure — fetchBestsellerListFromDb throws for it the
+            same as for a real outage, so separate the two rather than showing
+            an alarming red box for a perfectly normal empty database. */}
+        {!isPending && notYetIngested && (
+          <EmptyState
+            title="No Independent Press Top 40 data yet"
+            description="The weekly ingest has not stored a list for this region. It runs Thursday mornings Pacific."
+            actions={[{ label: 'Check again', onClick: () => refetch(), variant: 'outline' }]}
+          />
+        )}
+
+        {!isPending && !notYetIngested && (error || !display) && (
+          <ErrorState
+            title="Failed to load the Independent Press Top 40"
+            description={error instanceof Error ? error.message : 'Unknown error'}
+            onRetry={() => refetch()}
+          />
+        )}
+
+        {/* BookListDisplay -> BestsellerTable calls useRegion(), which throws
+            without a RegionProvider. The provider normally comes from the
+            /region/:region Layout, and this page sits outside it by design.
+            With no :region param the provider falls back to the default region
+            and its redirect effect stays inert, so this is just satisfying the
+            contract — currentRegion is only read by the staff switch hook,
+            which renders nothing here (isPbnStaff={false}). */}
+        {!isPending && !error && display && (
+          <RegionProvider>
+            <BookListDisplay
+              bestsellerData={display}
+              filter="all"
+              audienceFilter="all"
+              searchTerm=""
+              bookAudiences={{}}
+              isPbnStaff={false}
+              onSwitchingDataClear={() => {}}
+              abaPresence={abaPresence}
+              abaCompareRegion={compareRegion}
+            />
+          </RegionProvider>
+        )}
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
