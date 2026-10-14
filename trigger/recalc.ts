@@ -46,9 +46,23 @@ export function calculateScore(rank: number, listSize: number): number {
 
 export function buildScores(rows: ScoreSourceRow[]) {
   // Storage keeps every list membership; credit each book once, in its most
-  // specific list (composite CHILDREN'S INTEREST last). list_size counts the
-  // deduped rows so scores stay comparable with the historical
-  // one-row-per-book data.
+  // specific list (composite CHILDREN'S INTEREST last).
+  //
+  // list_size is the length of the list as published, measured BEFORE the
+  // dedupe: every stored row in that category, and never less than the
+  // highest rank on it. Counting the deduped rows instead shrank a list
+  // whenever a member was credited elsewhere, so its lower ranks scored
+  // against a list shorter than their rank and went negative (e.g. #15 on
+  // a "1-book" CHILDREN'S INTEREST = -290). For pre-Sept-2026 data, where
+  // storage held one row per book, both measures are the same.
+  const listSizes: Record<string, number> = {};
+  const rowCounts: Record<string, number> = {};
+  for (const r of rows) {
+    const cat = r.category || "General";
+    rowCounts[cat] = (rowCounts[cat] || 0) + 1;
+    listSizes[cat] = Math.max(listSizes[cat] || 0, rowCounts[cat], r.rank);
+  }
+
   const best = new Map<string, ScoreSourceRow>();
   for (const r of rows) {
     const existing = best.get(r.isbn);
@@ -58,14 +72,9 @@ export function buildScores(rows: ScoreSourceRow[]) {
   }
   const deduped = [...best.values()];
 
-  const categoryListSizes: Record<string, number> = {};
-  for (const r of deduped) {
-    const cat = r.category || "General";
-    categoryListSizes[cat] = (categoryListSizes[cat] || 0) + 1;
-  }
   return deduped.map((r) => {
     const cat = r.category || "General";
-    const listSize = categoryListSizes[cat];
+    const listSize = listSizes[cat];
     return {
       isbn: r.isbn,
       region: r.region,

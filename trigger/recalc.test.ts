@@ -48,7 +48,7 @@ describe("buildScores", () => {
     expect(scores.some((s) => s.isbn === "9780000000001" && s.category === "CHILDREN'S INTEREST")).toBe(true);
   });
 
-  it("computes list_size from the deduped rows, matching historical scoring", () => {
+  it("measures list_size before the dedupe, so a deduped-away member doesn't shrink the list", () => {
     const rows = [
       row({ isbn: "1111111111111", rank: 1, category: "CHILDREN'S TITLES" }),
       row({ isbn: "1111111111111", rank: 4, category: "EARLY & MIDDLE GRADE READERS" }),
@@ -56,9 +56,29 @@ describe("buildScores", () => {
     ];
     const scores = buildScores(rows);
     const emg = scores.find((s) => s.category === "EARLY & MIDDLE GRADE READERS");
-    // Only one book scores under EMG (the other deduped into CT), so its
-    // list_size is 1 — same as when storage itself was deduped.
-    expect(emg!.list_size).toBe(1);
+    // Only one book scores under EMG (the other deduped into CT), but the
+    // EMG list still runs to #5. Sizing it at 1 scored #5 at -132.
+    expect(emg!.list_size).toBe(5);
+    expect(emg!.points).toBeGreaterThan(0);
+  });
+
+  it("never scores a ranked book negative", () => {
+    // Composite-only book at #15 whose list-mates all deduped elsewhere —
+    // the real NAIBA / PNBA case that broke aggregate_book_metrics.
+    const rows = [
+      ...Array.from({ length: 14 }, (_, i) =>
+        row({ isbn: `97800000000${String(i).padStart(2, "0")}`, rank: i + 1, category: "EARLY & MIDDLE GRADE READERS" })
+      ),
+      row({ isbn: "9780000000099", rank: 15, category: "CHILDREN'S INTEREST" }),
+    ];
+    const scores = buildScores(rows);
+    for (const s of scores) {
+      expect(s.list_size).toBeGreaterThanOrEqual(s.rank);
+      expect(s.points).toBeGreaterThanOrEqual(0);
+    }
+    const ci = scores.find((s) => s.category === "CHILDREN'S INTEREST")!;
+    expect(ci.list_size).toBe(15);
+    expect(ci.points).toBeCloseTo(calculateScore(15, 15), 6);
   });
   it("computes list_size per category from the stored rows", () => {
     const rows = [
